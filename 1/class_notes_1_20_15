@@ -1,0 +1,64 @@
+#lecture notes 1.20.15
+#taken by Auriel Fournier
+#quantiative techniques
+
+n <- 3
+pop.mu <- 0.00
+pop.sd <- 1.00
+
+x <- rnorm(n, mean=pop.mu, sd=pop.sd)
+
+mean(x)
+
+sd(x)
+
+var(x)
+
+#these functions did what we just did long hand on the board 
+
+# we are assuming independent samples
+
+tau <- matrix(1, nrow=n, ncol=1)
+
+# we can't do this
+
+t(tau)*tau
+
+#because they are not confortmable arrays, we have to tell it to do matrix algebra
+#we do this by using the % sign around the multiplier
+
+uhat.nocorr <- 1/(t(tau)%*%tau)*t(tau)%*%x
+
+#t(tau)%*%x is the sum of the 'Y's
+# the entirety of line 30 is the sum of the y's divided by 3
+
+#trying to recreate the sd divided by the number of samples
+
+s <- matrix(nrow=n, ncol=2)
+
+s
+
+s[,1] <- rnorm(n)
+s[,2] <- rnorm(n)
+
+plot(s) # this is basically plotting the points on a map
+
+D <- as.matrix(dist(s)) #distance matrix
+
+rho <- 0.25
+Q <- rho^D
+#R knows that rho is scalar and D is a matrix, and it creates a matrix
+
+#the farther away they are the smaller the Q 
+#this is symetric
+
+r <- rnorm(3)
+
+t(r)%*%Q%*%r
+
+# since ^ is positive, this means means that it is positive semi definite 
+#you can't have a negative variance, or covariance matrix 
+
+u.corr <- solve((t(tau)%*%Q%*%tau)*t(tau)%*%Q%*%x)
+
+varu.corr <- 1/(t(tau)%*%Q%*%tau)
