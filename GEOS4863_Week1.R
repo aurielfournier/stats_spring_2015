@@ -5,7 +5,7 @@
 #							PREPARE AND INSPECT THE DATA
 
 # set working directory (to wherever you put your data file...)
-setwd("~/SourceTree/Stats_Spring_2015")
+setwd("~/Documents/stats_spring_2015")
 
 # verify working directory
 getwd()
