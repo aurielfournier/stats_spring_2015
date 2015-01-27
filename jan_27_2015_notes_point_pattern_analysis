@@ -1,0 +1,337 @@
+# load the spatstat library
+library(spatstat)
+
+# INTENSITY (FIRST ORDER)
+# We'll first investigate how the point pattern density varies across the area of interest
+# and with respect to covariates
+
+# Load some data that is supplied with spatstat
+data(swedishpines)
+summary(swedishpines) #your window greatly changes your density, must choose a relevent (ecologically, statistically, whatever) window
+plot(swedishpines)
+
+# extract the lambda estimate (the poisson intensity variable)
+lambda <- summary(swedishpines)$intensity
+
+# this estimate assumes homogenous intensity, ie. for all subregions in the
+# region, the intensity is the same.
+
+# if the inhomogenous intensity is caused by a covariate (such as a fault line) 
+# then we use the term "intensity measure" and think of it as lambda(s) where s is
+# the location within the area of interest or region.
+
+# often quadrat counting is used (as we saw in the hexagonal quadrat example in class)
+data(bei)
+quadratcount(bei,nx=4,ny=2)
+Q <- quadratcount(bei,nx=6,ny=3)
+plot(bei, cex = 0.5, pch = "+")
+plot(Q, add=TRUE, cex =2)
+
+# However, there may be some function that describes the intensity as a function of location.  
+
+# First, we look at kernel density estimators as an exploratory/visualization mechanism
+
+# The KDE assesses intensity with a sub-regions as defined by the size and shape of the kernel. 
+den <- density.ppp(bei,sigma=70, kernel='gaussian') #don't have to add the .ppp since R 'knows' 
+#the curve goes out to 3 sigma, counts the # of points (under a weighted gaussian curve), scoots over, counts again, scoots over, counts again
+#in this ppp the unit is 1 meter, so the 70 is 70 meters, so the radius of the kernal is 2xsigma (140 meters in this example). 
+#kernal density changes your outcome. 
+plot(den)
+plot(bei, add = TRUE, cex=0.1)
+
+den <- density.ppp(bei, sigma=70, kernel='gaussian') #saves as an image file
+
+# perspective and contour plots
+persp(den) #view angle can be changed
+contour(den, axes=FALSE)
+
+#making a very large sigma (700) shows you the horizontal variation you might miss otherwise
+# Pay attention to the sigma. What other kernel types do we have access to in density.ppp?
+
+# adaptive density is another inhomogenous density visualization and uses a fraction, f, 
+# of the points to compute a direchlet tesselation of the data. Within in each voronoi polygon
+# it computes lambda in each polygon.  This is done "nrep" times to get a better estimate.
+aden <- adaptive.density(bei,f=0.01,nrep=10)
+plot(aden, main = "Adaptive Intensity")
+plot(bei, add=TRUE, cex=0.1)
+
+# quadrats determined by a covariate. Quadrats don't have to be hexagonal or
+# rectangular.  They don't have to be equal area either as long as the area is 
+# taken into account
+Z <- bei.extra$grad
+b <- quantile(Z, probs=(0:4)/4) #defining cut lines
+Zcut <- cut(Z, breaks=b,labels=c('low','mlow','mhigh','high')) #puts them in named categories
+V <- tess(image = Zcut) #another data type = tesselation
+plot(V) #the difference between this and plot(ZCut) is that R interprets it differently. 
+plot(bei,add=T,pch='+')
+qb <- quadratcount(bei,tess=V)#tess=V, means don't use boxes, use this tesselation (so how many trees in each category)
+#so we're looking at the distribution driven by a covariate (slope in this case)
+#can't just compare the qb counts, because the tesselations are not of the same area, so numbers arenot straight comparable. 
+quadrat.test(qb) #this allows us to compare the numbers between quadrats adn gives us the chi-squared result
+
+
+# if the regions aren't equal area, then we would need to compute the intensity
+# of the point pattern in each region by dividing the count by the region area
+
+# now, what if we assume the intensity of the point process is a function of the
+# covariate, Z. So at any spatial locaiton s, lambda(s) is a function of Z(s)
+# the nature of that function is what we're after
+# we can plot the intensity as a function of slope for example, Baddeley, 2012.
+# this technique is designed for continuous covariates (like slope or elevation).
+# r
+# use quadrat counts 
+slope <- bei.extra$grad
+plot(rhohat(bei,slope)) #reduces 2D dataset to 1D dataset. 
+#orders them lowest slope to highest slope
+#marks at the bottom show the density of points
+# y axis is the function of slope (tries to relate intensity of points to slope)
+#uncertainty increases as slope increases
+#this reduces the point pattern to a floating point number
+
+# creating covariates, distance maps are an important case, as we've seen, 
+# the covariate Z(s) = distance from L
+data(copper)
+summary(copper)
+# Length Class  Mode    
+# FullWindow    4      owin   list   #window 
+# Points        5      ppp    list   #point pattern
+# Lines         4      psp    list    #lines
+# SouthWindow   4      owin   list    #window
+# SouthPoints   5      ppp    list    #points
+# SouthLines    4      psp    list    #lines
+# SouthDistance 1      -none- function #function with distance
+
+X <- rotate(copper$SouthPoints, pi/2)
+L <- rotate(copper$SouthLines, pi/2)
+plot(X, pch = 16, main = "copper data")
+plot(L, add = TRUE)
+Z <- distmap(L) #creates a distance map, for every square km in the dataset, how far away is the faultline?
+plot(L, lwd = 2, main = '', add=T)
+contour(Z, add = TRUE)
+#does the intensity of where points occur depend on their proximity to fault lines?
+
+# now apply the rho estimate
+plot(rhohat(X,Z), xlab = 'Distance to nearest fault')
+
+# TESTING FOR COMPLETE SPATIAL RANDOMNESS
+# CSR - 
+#   1. the number of points falling in any region A has a Poisson distribution with
+#      mean, lambda * area(A)
+#   2. given that there are n points in A, the locations of those points are i.i.d
+#      and uniformly distributed inside A
+#   3. the contents of two disjoint regionss A and B are independent
+#
+# CSR is the "null hypothesis" and Pearson's Chi-square Goodness of fit test is used
+#
+# This is simple in the R spatstat package using quadrat.test
+# 
+# let's look at this 1st order test of homongenous intensity on generated pp datasets
+this.window = owin(c(0,10),c(0,10))
+pp.csr <- rpoispp(1, win=this.window)
+pp.cluster <- rMatClust(1,0.2,3,win=this.window)
+pp.regular <- rSSI(0.75,100, win=this.window)
+
+csr.test <- quadrat.test(pp.csr,nx=4,ny=4)
+plot(pp.csr, pch='.', color='blue')
+plot(csr.test, add=TRUE)
+
+cluster.test <- quadrat.test(pp.cluster, nx=4, ny=4)
+plot(pp.cluster, pch='.', color='blue')
+plot(cluster.test, add=TRUE)
+
+regular.test <- quadrat.test(pp.regular, nx=4, ny=4)
+plot(pp.regular, pch='.', color='blue')
+plot(regular.test, add=TRUE)
+
+# draw the chi-square pdf 
+curve(dchisq(x,df=15,log=FALSE),0,50)
+
+# we can easily run the chi-sqare test on real data now
+Q.test <- quadrat.test(bei, nx=6, ny=3)
+curve(dchisq(x,df=17,log=FALSE),0,50)
+
+# we can use covariates as well, in this case to define irregular quadrats based
+# on the covariate
+Z <- bei.extra$grad
+b <- quantile(Z, probs=(0:4)/4)
+Zcut <- cut(Z, breaks=b,labels=c('low','mlow','mhigh','high'))
+V <- tess(image = Zcut)
+plot(V)
+plot(bei,add=T,pch='+')
+qb <- quadratcount(bei,tess=V)
+plot(qb, add = TRUE)
+quadrat.test(bei,tess=V)
+plot(quadrat.test(bei,tess=V))
+
+# A more powerful test is the Kolmogorov-Smirnov test using the slope as a covariate
+KS <- kstest(bei,Z)
+plot(KS)
+
+# the K-S test is preferred if the covariate is continuous (like slope). If the 
+# covariate is a discrete variable then K-S is ineffective because of tied values and the
+# quadrat test would be preferred. More information on this might be a good project.
+
+# spatial logistic regression (covered in Dr. Kvamme's advanced raster class)
+data(copper)
+X <- rotate(copper$SouthPoints, pi/2)
+L <- rotate(copper$SouthLines, pi/2)
+D <- distfun(L)
+fit <- slrm(X ~ D)
+fit
+# the fit is log(p/(p-1)) = intercept + D(s)*X(s) where s is the location and p 
+# is the probability of finding an event at that location
+# with the "fit" slrm object there are methods such as predict that allow you predict the 
+# probabilty of an event at a particular location, s, given the value of the covariate
+# (in this case, the locations distance from a fault line)
+predicted.copper <- predict(fit)
+plot(predicted.copper)
+# another good project idea - to learn more about this
+
+# INTERACTION (SECOND ORDER, or DEPENDENCE BETWEEN POINTS)
+
+# this is tricky because all these techniques assume that clustering or regularity
+# is due NOT to intensity variations in the process, but rather to interactions among 
+# the events themselves - be careful here because you have to make an a pretty big leap
+# and a good argument for homogeneity (or stationarity)
+
+
+# data exploration first (as always)
+
+# first, general a true CSR, then a "regular" pattern, then a "clustered" pattern (as we did earlier)
+this.window = owin(c(0,10),c(0,10))
+pp.csr <- rpoispp(1, win=this.window)
+pp.cluster <- rMatClust(1,0.2,3,win=this.window)
+pp.regular <- rSSI(0.75,100, win=this.window)
+
+# two simple viewing methods 
+# Morishita plot plots chi-squared results at various quadrat sizes
+miplot(pp.csr)
+miplot(pp.cluster)
+miplot(pp.regular)
+
+# note the distintive patterns.  try against a real dataset
+data(lansing)
+miplot(split(lansing)$hickory)
+
+# another is the Fry plot - take a transparency with a red dot. place the transparency at an event
+# and trace all the other events on the transparent page. move to the next event and repeat. do it 
+# for all events. the results is the fry plot
+fryplot(pp.csr,char=0.01,pch='.')
+fryplot(pp.cluster,char=0.01,pch='.')
+fryplot(pp.regular,char=0.01,pch='.')
+fryplot(split(lansing)$hickory, char=0.01,pch='.')
+
+# nevertheless, these are qualitative and difficult to interpret
+# distance-based methods have been developed in an attempt to better assess to better find patterns
+
+# 1. pairwise distances ||sj - si||                   
+# The distance between all distinct pairs of points s
+D.pairwise <-  pairdist(pp.csr, squared=FALSE, periodic=TRUE) #returns a matrix
+
+# note also that crossdist is available which compete distances between to sets of objects
+hickory <- split(lansing)$hickory
+maple <- split(lansing)$maple
+D.cross <- crossdist(split(hickory,maple)
+
+# 2. nearest neighbor distances ti = min(sij)         The distance from each point si to it's nearest neighbor
+D.nn <- nndist(pp.csr, k=1) # returns a vector
+
+# 3. empty space distances d(u) = min-i ||u - si||    The distance from a fixed reference location, u, 
+#    in the window to the nearest neighbor
+D.esd <- distmap(pp.csr)
+plot(D.esd, main = "Empty Space Distances")
+plot(pp.csr, add=TRUE)
+                     
+# Note that these basic distance functions are NOT edge corrected
+
+# another useful plot technique, the Steinen diagram (circle diameter is nearest neighbor distance)
+plot(pp.csr %mark% (nndist(pp.csr)/2), markscale=1, main = 'Steinen Diagram')
+                     
+#3 EMPTY SPACE DISTANCES (the F function)
+                     
+# the basic idea is to generate empirical cumulative distribution functions and compare them to CSR
+# the expected cdf of empty space distance is based on the Poisson intensity process (see Baddeley, 2010)
+lambda <- summary(bei)$intensity
+Fpois <- function(r) {1 - exp(-lambda*pi*r^2)}
+curve(Fpois,0,10)
+curve(1-exp(-lambda*pi*x^2),0,10)
+                     
+# the function, Fest, produces an estiamte of Fpois for a given ppp dataset.
+Fcsr <- Fest(pp.csr)     # the return values is an object of type fv (function value table)
+Fbei <- Fest(bei)                     
+# How nice is R! It computes Fpois for you based on the intensity estimate of the provided point process
+par(pty='s')
+plot(Fest(bei))
+
+# to see just the theoretical or another use
+plot(Fbei, theo ~ r, main = 'Theoretical')
+plot(Fbei, rs ~ r, main = 'border corrected') 
+plot(Fbei, cbind(rs, theo) ~ r)  
+# these are obviously similar to expected F for a CSR
+                     
+# let's see how different patterns behave                     
+plot(Fest(pp.csr),rs ~ r, lty=2)
+plot(Fest(pp.regular), rs ~ r, add=TRUE, col='blue')
+plot(Fest(pp.cluster), rs ~ r, add=TRUE, col='red')
+                     
+# NEAREST NEIGHBOR DISTANCES (the G function)
+
+# the cumulative distribution function G(r) = P{d(u,X \ {u}), u is an element of X}
+# for a homongenous Poisson process Gpois(r) = 1 - exp(-lambda*pi*r^2)  (same as F, right?)
+Gbie <- Gest(bei)
+plot(Gbie)                     
+                     
+# if events are closely clustered space, G increases rapidly at short distances
+G.cluster <- Gest(pp.cluster)
+plot(G.cluster)
+# what happens if event are more regular
+G.regular <- Gest(pp.regular)                     
+plot(G.regular)
+                     
+# PAIRWISE DISTANCES (the K function)
+# the observed distances in a point pattern constitute a biased sample of pairwise distances
+# in the process, favoring smaller distances (since we'll never observe a distance large than the window)
+# Ripley defined the K-function so that lambda*K(r) is the expected number of points in the process within
+# a distance r of a typical point of the process
+# Kpois = pi * r^2 (it doesn't depend on the intensity)
+K.csr <- Kest(pp.csr)
+plot(K.csr)    
+                     
+# computing envelopes using Monte Carlo techniques (Baddelley, page 132)
+K.regular.env <- envelope.ppp(pp.regular,Kest,nsim=39,rank=1)                     
+K.cluster.env <- envelope.ppp(pp.cluster,Kest,nsim=39,nrank=1)
+K.csr.env <- envelope.ppp(pp.csr, Kest, nsim=39, nrank=1)
+                     
+# note that Kest can be border/edge corrected. See ?Kest
+         
+# another commonly used statistic the transformed K value, L, of course.
+# L(r) = sqrt(K(r)/pi) which makes a L of a poisson process a straight line
+L.csr <- Lest(pp.csr)
+plot(L.csr)
+                     
+L.cluster <- Lest(pp.cluster)
+plot(L.cluster)
+                     
+# also the J function J(r) = (1 - G(r))/(1-F(r))  so that Jpois(r) = 1
+# J(r) > 1 suggest regularity, J(r) < 1 suggest clustering
+
+# you could just do this...
+plot(allstats(bei))
+                     
+                     
+# CAVEATS TO ALL OF THE PRECEDING
+# 1. F,G, and K are defined and estimated under the assumption that the point process is homogenous
+# 2. summary functions do not characterize the process (that's model fitting)
+# 3. if the process is not homogenous, deviations between thereotical and empirical are not evidence 
+#    (necessarily) of interpoint interaction, since they may also be attributable to variations in intensity
+                     
+# for example, #3
+X <- rpoispp(function(x,y){300*exp(-3*x)})
+                     
+                     
+                     
+                     
+                     
+                     
+                     
+                     
