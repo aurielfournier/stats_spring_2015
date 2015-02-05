@@ -1,0 +1,93 @@
+---
+title: "Quan_Techniques_Week_3"
+author: "Auriel Fournier"
+date: "Tuesday, February 03, 2015"
+output: pdf_document
+---
+
+```{r}
+library(spatstat)
+
+data(chorley)
+
+ch <- unique.ppp(chorley)
+ch_lung <- ch[ch$marks=="lung",]
+ch_lar <- ch[ch$marks=="larynx",]
+
+lambda <- summary(ch)$intensity
+lambda
+
+q <- quadratcount(ch, nx=4,ny=2)
+q_lung <- quadratcount(ch_lung, nx=4,ny=2)
+q_lar <- quadratcount(ch_lar, nx=4,ny=2)
+
+plot(ch, cex=0.5)
+plot(q, add=T, cex=2)
+
+
+plot(ch_lung, cex=0.5)
+plot(q_lung, add=T, cex=2)
+
+
+plot(ch_lar, cex=0.5)
+plot(q_lar, add=T, cex=2)
+
+#so the quadrats are not the same size, so we need to correct for that
+
+den <- density.ppp(ch, sigma=2, kernel='gaussian')
+den_lung <- density.ppp(ch_lung, sigma=2, kernel='gaussian')
+den_lar <- density.ppp(ch_lar, sigma=2, kernel='gaussian')
+
+plot(den)
+plot(ch, add=T, cex=.1)
+
+plot(den_lung)
+plot(ch_lung, add=T, cex=.1)
+
+plot(den_lar)
+plot(ch_lar, add=T, cex=.1)
+
+persp(den)
+persp(den_lung)
+persp(den_lar)
+
+contour(den)
+contour(den_lung)
+contour(den_lar)
+
+aden <- adaptive.density(ch, f=0.01, nrep=10)
+plot(aden)
+plot(ch, add=T, cex=0.1)
+
+this.window <- ch$window
+csr.test <- quadrat.test(ch, nx=4, ny=4, method="Chisq")
+csr.test
+plot(ch, color='blue')
+plot(csr.test, add=T, color="red")
+
+csr.test_lung <- quadrat.test(ch_lung, nx=4, ny=4, method="Chisq")
+csr.test_lung
+plot(ch, color='blue')
+plot(csr.test_lung, add=T, color="red")
+
+csr.test_lar <- quadrat.test(ch_lar, nx=4, ny=4, method="Chisq")
+csr.test_lar
+plot(ch, color='blue')
+plot(csr.test_lar, add=T, color="red")
+
+
+csr.test
+csr.test_lung
+csr.test_lar
+
+```
+
+based on these results we reject the null hypothesis that these points exhibit complete spatial randomness, but 
+this doesn't tell us what is driving the distribution of the points, just that they aren't CSR. 
+
+# first order interactions
+
+
+
+
+# second order interactions
