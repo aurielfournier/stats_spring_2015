@@ -203,7 +203,7 @@ str(delta.hist)
 
 # ...and extract midpoints of the intervals
 delta.hist$mids
-
+ 
 # QUESTION: why are both intensities and densities and why are they the same in our dataset?
 
 # now compute relative frequency distribution
