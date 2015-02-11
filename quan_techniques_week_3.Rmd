@@ -9,8 +9,8 @@ library(spatstat)
 data(chorley)
 
 ch <- unique.ppp(chorley)
-ch_lung <- ch[ch$marks=="lung",]
-ch_lar <- ch[ch$marks=="larynx",]
+ch_lung <- split(ch)$lung
+ch_lar <- split(ch)$larynx
 this.window <- ch$window
 incin <- ppp(chorley.extra$incin$x, chorley.extra$incin$y, window=this.window)
 distmap <- distmap(incin)
@@ -47,10 +47,10 @@ So the p-value is really small, meaning that they are not Completely Spatially R
 
 ```{r}
 null <- ppm(ch_lar)
-dist <- ppm(ch_lar, ~distmap, covariates=distmap)
-pop <- ppm(ch_lar, ~den_lung, covariates=den_lung)
-pop_dist <- ppm(ch_lar, ~den_lung+distmap, covariates =c(den_lung, distmap))
-pop.dist <- ppm(ch_lar, ~den_lung*distmap, covariates=c(den_lung, distmap))
+dist <- ppm(ch_lar ~distmap)
+pop <- ppm(ch_lar ~den_lung)
+pop_dist <- ppm(ch_lar ~den_lung+distmap)
+pop.dist <- ppm(ch_lar ~den_lung*distmap)
 
 aic <- matrix(ncol=2, nrow=5)
 aic[,1] <- c("null","dist","pop","pop_dist","pop.dist")
@@ -66,6 +66,7 @@ Based on the AIC of these models the model with 328.255 is the lowest and is for
 First lets just look at the model output for pop_dist
 ```{r}
 pop_dist
+diagnose.ppm(pop_dist)
 ```
 
 So there is a positive response to den_lung (our proxy for population) so it looks like there is more occurances of larynx where there are more people. 
@@ -80,5 +81,7 @@ I wasn't able to get the predict() function to produce predictions, or it did, b
 ```{r, fig.height=7}
 pop_den_predict <- predict(pop_dist, type="intensity", se=T, window=this.window)
 names(pop_den_predict)
-plot(pop_den_predict$larynx)
+par(mfrow=c(1,2))
+plot(pop_den_predict$se)
+plot(pop_den_predict$estimate)
 ```
