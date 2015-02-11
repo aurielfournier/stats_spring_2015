@@ -64,24 +64,15 @@ aic[aic[,2]==min(aic[,2]),]
 Based on the AIC of these models the model with 328.255 is the lowest and is for the pop_dist model. 
 
 First lets just look at the model output for pop_dist
-```{r}
+```{r, fig.height=7}
 pop_dist
 diagnose.ppm(pop_dist)
 ```
 
-So there is a positive response to den_lung (our proxy for population) so it looks like there is more occurances of larynx where there are more people. 
+So there is a positive response to den_lung (our proxy for population) so it looks like there is more occurances of larynx where there are more people. This is also how the standard error is distributed, meaning that our model doesn't fit very well. 
 
-This model includes the distmap covariate, but it is not significant. 
+the pop_dist model includes the distmap covariate, but it is not significant. This indicates that there is not a significant relationship between distnace from the incernartor and intensity of larynx cancer cases. 
 
 If we look at the model with only population we see that it has a slightly higher AIC, but it's with 2 Delta AIC, so that is another plausible model. It has a similar positive value for it's parameter estimate, a slightly lower value, but similar and still significant. 
 
 From this result I would say that larynx cancer rates are not related to distance from the incinerator, but are occuring at a certain rate within the population, perhaps related to some other factor that we do not have the data to understand right now. 
-
-I wasn't able to get the predict() function to produce predictions, or it did, but it didnt produce standard errors. 
-```{r, fig.height=7}
-pop_den_predict <- predict(pop_dist, type="intensity", se=T, window=this.window)
-names(pop_den_predict)
-par(mfrow=c(1,2))
-plot(pop_den_predict$se)
-plot(pop_den_predict$estimate)
-```
