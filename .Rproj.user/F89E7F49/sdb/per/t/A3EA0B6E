@@ -1,0 +1,16 @@
+{
+    "contents" : "---\ntitle: \"quan_tech_exam_1_q_1\"\nauthor: \"Auriel Fournier\"\ndate: \"Thursday, February 12, 2015\"\noutput: pdf_document\n---\n\n```{r, fig.width=8}\nlibrary(spatstat)\n\ndata(bei)\n\nplot(bei)\n\nelev <- bei.extra$elev\ngrad <- bei.extra$grad\nplot(elev)\nplot(grad)\nq <- quadratcount(bei, nx=6,ny=3)\nplot(bei)\nplot(q, add=T)\n\nden <- density.ppp(bei, sigma=70, kernel=\"gaussian\")\nplot(den)\nplot(bei,add=T)\n\ncontour(den)\n\nb <- quantile(grad, probs=(0:4)/4)\ngradcut <- cut(grad, breaks=b, labels=c('low','mlow','mhigh','high'))\nv <- tess(image=gradcut)\nplot(v)\nplot(bei, add=T)\nqb <- quadratcount(bei, tess=v)\nplot(rhohat(bei,grad))\nplot(rhohat(bei,elev))\nplot(cdf.test(bei,grad,test=\"ks\"))\nplot(cdf.test(bei,elev,test=\"ks\"))\n\nnull <- ppm(bei)\ngrd <- ppm(bei ~ grad)\nelv <- ppm(bei ~ elev)  \ngrd.elv <- ppm(bei ~ elev * grad)\ngrd_elv <- ppm(bei ~ elev + grad)\n\naic <- matrix(ncol=2, nrow=5)\naic[,1] <- c(\"null\",\"grd\",\"elv\",\"grd.elv\",\"grd_elv\")\naic[,2] <- c(AIC(null),AIC(grd),AIC(elv),AIC(grd.elv),AIC(grd_elv))\n\naic\n\naic[aic[,2]==min(aic[,2]),]\n\ndiagnose.ppm(grd.elv)\n\npred <- predict(grd.elv, se=T)\n```",
+    "created" : 1423766211285.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "1006609544",
+    "id" : "A3EA0B6E",
+    "lastKnownWriteTime" : 1423770119,
+    "path" : "~/GitHub/stats_spring_2015/quan_tech_exam_1_question_1.Rmd",
+    "project_path" : "quan_tech_exam_1_question_1.Rmd",
+    "properties" : {
+    },
+    "source_on_save" : false,
+    "type" : "r_markdown"
+}

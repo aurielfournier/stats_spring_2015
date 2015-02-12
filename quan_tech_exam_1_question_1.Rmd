@@ -1,0 +1,57 @@
+---
+title: "quan_tech_exam_1_q_1"
+author: "Auriel Fournier"
+date: "Thursday, February 12, 2015"
+output: pdf_document
+---
+
+```{r, fig.width=8}
+library(spatstat)
+
+data(bei)
+
+plot(bei)
+
+elev <- bei.extra$elev
+grad <- bei.extra$grad
+plot(elev)
+plot(grad)
+q <- quadratcount(bei, nx=6,ny=3)
+plot(bei)
+plot(q, add=T)
+
+den <- density.ppp(bei, sigma=70, kernel="gaussian")
+plot(den)
+plot(bei,add=T)
+
+contour(den)
+
+b <- quantile(grad, probs=(0:4)/4)
+gradcut <- cut(grad, breaks=b, labels=c('low','mlow','mhigh','high'))
+v <- tess(image=gradcut)
+plot(v)
+plot(bei, add=T)
+qb <- quadratcount(bei, tess=v)
+plot(rhohat(bei,grad))
+plot(rhohat(bei,elev))
+plot(cdf.test(bei,grad,test="ks"))
+plot(cdf.test(bei,elev,test="ks"))
+
+null <- ppm(bei)
+grd <- ppm(bei ~ grad)
+elv <- ppm(bei ~ elev)  
+grd.elv <- ppm(bei ~ elev * grad)
+grd_elv <- ppm(bei ~ elev + grad)
+
+aic <- matrix(ncol=2, nrow=5)
+aic[,1] <- c("null","grd","elv","grd.elv","grd_elv")
+aic[,2] <- c(AIC(null),AIC(grd),AIC(elv),AIC(grd.elv),AIC(grd_elv))
+
+aic
+
+aic[aic[,2]==min(aic[,2]),]
+
+diagnose.ppm(grd.elv)
+
+pred <- predict(grd.elv, se=T)
+```

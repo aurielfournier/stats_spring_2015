@@ -1,0 +1,84 @@
+---
+title: "quan_tech_exam_1_q_2"
+author: "Auriel Fournier"
+date: "Thursday, February 12, 2015"
+output: pdf_document
+---
+
+```{r, fig.width=8}
+library(spatstat)
+
+dat <- read.csv("pattern.csv")
+
+p <- ppp(dat$x, dat$y, window=owin(c(0,10),c(0,10)))
+
+plot(p)
+
+lambda <- summary(p)$intensity
+
+q <- quadratcount(p, nx=4,ny=2)
+
+plot(p)
+points(p, col="gray")
+plot(q, add=T, col="red")
+```
+
+So this futher illustrates the fact that these points are not exhibiting CSR, there are more in the upper left corer then the lower right and they gradually decrease between those two corners. 
+
+```{r}
+
+den <- density.ppp(p, sigma=.5, kernel='gaussian')
+
+plot(den)
+contour(den)
+```
+
+this shows the variation over a smooth surface and reiterates the pattern observed above
+
+```{r}
+
+csr.test <- quadrat.test(p, nx=4, ny=4, method="Chisq")
+csr.test
+```
+
+becuase of the very small p value we can reject the hypothesis that the points are exhibiting CSR and move on to trying to understand the pattern. 
+
+we do not have any additional covartiates that could be used to explain the intensity of these points but we can try a ppm 
+
+```{r, fig.height=8}
+
+null <- ppm(p)
+diagnose.ppm(null)
+```
+
+this shows that the residuals are not evenly distributed and there is more variation in the data in teh upper left hand corner, so the model is not a very good fit. Which isn't surprising, it's a null model. 
+
+So now we turn to second order effects. 
+
+```{r}
+
+miplot(p)
+```
+
+regardless of the size o the quadrat, we have some form of clustering, but there is more clustering when the quadrats are smaller. 
+
+
+```{r, fig.height=8}
+
+fryplot(p)
+```
+
+Now that is just cool looking, and shows some kind of clustering.
+
+```{r}
+D.pairwise <- pairdist(p, squared=F, periodic=T)
+D.nn <- nndist(p, k=1)
+D.esd <- distmap(p)
+F.csr <- function(r){1-exp(-lambda*pi*r^2)}
+curve(F.csr,0,10)
+F.bei <- Fest(p)
+G.p <- Gest(p)
+K.p <- Kest(p)
+L.p <- Lest(p)
+plot(allstats(p))
+```
