@@ -1,13 +1,12 @@
 ---
-title: "quan_tech_exam_1_q_2"
-author: "Auriel Fournier"
-date: "Thursday, February 12, 2015"
 output: pdf_document
 ---
-
+# Point Pattern Exam Question 2
+## Auriel MV Fournier
 ```{r, fig.width=8}
 library(spatstat)
-
+```
+```{r}
 dat <- read.csv("pattern.csv")
 
 p <- ppp(dat$x, dat$y, window=owin(c(0,10),c(0,10)))
@@ -51,7 +50,7 @@ null <- ppm(p)
 diagnose.ppm(null)
 ```
 
-this shows that the residuals are not evenly distributed and there is more variation in the data in teh upper left hand corner, so the model is not a very good fit. Which isn't surprising, it's a null model. 
+this shows that the residuals are roughly normally distributed and there is more variation in the data in teh upper left hand corner, so the model is an ok fit, but since it doesn't actually show us what is driving the distribution of intensity. 
 
 So now we turn to second order effects. 
 
@@ -63,22 +62,24 @@ miplot(p)
 regardless of the size o the quadrat, we have some form of clustering, but there is more clustering when the quadrats are smaller. 
 
 
-```{r, fig.height=8}
-
-fryplot(p)
-```
-
-Now that is just cool looking, and shows some kind of clustering.
-
 ```{r}
 D.pairwise <- pairdist(p, squared=F, periodic=T)
 D.nn <- nndist(p, k=1)
 D.esd <- distmap(p)
-F.csr <- function(r){1-exp(-lambda*pi*r^2)}
-curve(F.csr,0,10)
-F.bei <- Fest(p)
-G.p <- Gest(p)
-K.p <- Kest(p)
-L.p <- Lest(p)
 plot(allstats(p))
 ```
+
+So the F function looks at the distribution of empty space, since the Fkm is below Fpois that means that there is less empty space between points then expected, but not tons, since the curve mimics Fpoison, just lower.
+
+The K functino looks at the clustering of points, and since Kiso is higher then Kpois there is more clustering then expected, but again not tons since the curve mimics Kpoison, just higher. 
+
+G function looks at the nearest neighbor of a point pattern, and since Gkm is slightly higher then G poison at most values that means that points are slightly closer together then expected. 
+
+I honestly don't understand what the J function does, so we're just going to talk about the othe three.
+
+F, G and K show that the points are slightly more clustered, and closer together then woudl be expected based on their intensity alone. Since I don't know what these points represent I have no idea what the mechanism would be that might explain this slight attraction. 
+
+If these points were bird nests they could be nests of birds like albatrosses that nest in large colonies and like to be close together so they can have as many eyes as possible looking for predators. Each nests still needs some space though, so they aren't tightly clustered. The change in intensity coudl be expalined by teh age fo teh birds, with younger birds being on the outside and not having experience nesting they don't realize the benefits of being tight together with other individuals. If we had a marked ppp with age for this cluster pattern we could examine this more. Honestly this looks more like a first order point pattern with intensiy varying along some gradient that decreases (or increases) from upper left to lower right. 
+
+
+
