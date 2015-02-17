@@ -1,0 +1,95 @@
+---
+output: pdf_document
+---
+# Point Pattern Exam Question 2
+## Auriel MV Fournier
+```{r, fig.height=8}
+library(spatstat)
+```
+
+So we read in the data, turn it into a planar point pattern using the ppp() function and plot it to see what we've got. 
+
+```{r}
+dat <- read.csv("pattern.csv")
+
+p <- ppp(dat$x, dat$y, window=owin(c(0,10),c(0,10)))
+
+plot(p)
+```
+
+Its pretty clear just from visual examination that we have a pattern, but lets do a quadrat count to look at how intensity varies over time in a quantitative way since the human eye has been known to find patterns where none exist. 
+
+```{r}
+q <- quadratcount(p, nx=8,ny=8)
+
+plot(p)
+points(p, col="gray")
+plot(q, add=T, col="red")
+```
+
+So this further illustrates the fact that these points are not exhibiting CSR, there are more in the upper left corner then the lower right and they gradually decrease between those two corners. This shows the variation over a smooth surface and reiterates the pattern observed above
+
+```{r}
+
+den <- density.ppp(p, sigma=.5, kernel='gaussian')
+
+plot(den)
+```
+
+Via the density map and the quadrat count we know that this is not exhibiting complete spatial randomness, but just to be sure lets run a quadrat.test() 
+
+We find a very small p-value which means we can reject our null hypothesis that the points are exhibiting complete spatial randomness and now we can start to try and understand why they are arranged the way they are. 
+
+```{r}
+
+csr.test <- quadrat.test(p, nx=8, ny=8, method="Chisq")
+csr.test
+```
+
+Often this is where we would try to look at first-order effects by explaining the changes in intensity with some kind of surface or other covariate, perhaps replated to the environment in which the points occur. In this case we might be looking at densities of trees across a square mile of land, and there is a change in slope, or soil type between the upper left had and lower right hand corner. But we were not given any additioan covariates to go with these points, so we are left with just the null model to run through the ppm()
+
+```{r, fig.height=8}
+null <- ppm(p)
+diagnose.ppm(null)
+```
+
+This shows that the residuals are roughly normally distributed and there is more variation in the data in the upper left hand corner, so the model is an ok fit, but since it doesn't actually show us what is driving the distribution of intensity. 
+
+### second order effects. 
+
+Since we could not explain the variation in intensity across the square with first order effects we turn to second order effects, which are the effects of the points on other points, or point to point interaction. This can exhibit itself in many ways, if the points were repelling each other we woudl expect a fairly regular pattern of points across space, or if the points were attracted to each other we would expect them to form clusters, or perhaps one large cluster. Our pattern here appears more clustered then reguarly spaced, but lets examine it further. 
+
+```{r}
+miplot(p)
+```
+
+regardless of the quadrat size (x-axis), we have some form of clustering, but there is more clustering when the quadrats are smaller. 
+
+```{r}
+
+kk <- Kinhom(p)
+plot(kk)
+```
+
+
+```{r}
+D.pairwise <- pairdist(p, squared=F, periodic=T)
+D.nn <- nndist(p, k=1)
+D.esd <- distmap(p)
+plot(allstats(p), main=" ")
+```
+
+The F function looks at the distribution of empty space, since the F~km~ is below F~pois~ that means that there is less empty space between points then expected, but not tons, since the curve mimics F~poison~, just lower.
+
+The K function looks at the clustering of points, and since K~iso~ is higher then K~pois~ there is more clustering then expected, but again not tons since the curve mimics Kpoison, just higher. 
+
+G function looks at the nearest neighbor of a point pattern, and since G~km~ is slightly higher then G poison at most values that means that points are slightly closer together then expected. 
+
+I honestly don't understand what the J function does, so we're just going to talk about the other three.
+
+F, G and K show that the points are slightly more clustered, and closer together then would be expected based on their intensity alone. Since I don't know what these points represent I have no idea what the mechanism would be that might explain this slight attraction. 
+
+If these points were bird nests they could be nests of birds like albatrosses that nest in large colonies and like to be close together so they can have as many eyes as possible looking for predators. Each nests still needs some space though, so they aren't tightly clustered. The change in intensity could be explained by the age of the birds, with younger birds being on the outside and not having experience nesting they don't realize the benefits of being tight together with other individuals. If we had a marked ppp with age for this cluster pattern we could examine this more. Honestly this looks more like a first order point pattern with intensity varying along some gradient that decreases (or increases) from upper left to lower right. 
+
+
+
