@@ -5,7 +5,7 @@
 
 
 x <- c("ggplot2","spdep","ggmap", "rgdal", "rgeos", "maptools", "dplyr", "tidyr") # the packages
-install.packages(x) # warning: this may take a number of minutes
+#install.packages(x) # warning: this may take a number of minutes
 lapply(x, library, character.only = TRUE) # load the required packages
 
 
