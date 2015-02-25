@@ -1,0 +1,23 @@
+---
+title: "Evaluation of Detection Differences in Nocturnal ATV Surveys"
+author: "Auriel Fournier"
+date: "March 31, 2015"
+output:
+  html_document:
+    fig_height: 8
+    fig_width: 12
+    keep_md: yes
+    number_sections: yes
+    theme: default
+    toc: no
+  pdf_document:
+    fig_height: 6
+    fig_width: 7
+    keep_tex: yes
+    number_sections: yes
+    toc: no
+---
+
+here is some text
+
+because I'm curious
