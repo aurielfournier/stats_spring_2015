@@ -1,0 +1,748 @@
+---
+title: "Areal Data Analysis"
+author: "Jackson Cothren"
+date: "February 17, 2015"
+output:
+  html_document:
+    fig_height: 8
+    fig_width: 12
+    keep_md: yes
+    number_sections: yes
+    theme: default
+    toc: yes
+  pdf_document:
+    fig_height: 6
+    fig_width: 7
+    keep_tex: yes
+    number_sections: yes
+    toc: yes
+  word_document: default
+---
+
+# Introduction to areal data
+
+Areal data differs from point pattern and continuous data in the form of the data itself. While continuous data involves. Point patterns can be thought of as samples from a continuous space (but where the lcoation of the event is of important) and continuos spatial distributions (such as temperature readings at various point locations) are estimated from samples. Areal, or lattice data, on the other hand, involves aggregated quantities within some relevant spatial partition of a given region (such as census tracts within a city, counties within a statem, watersheds in ecoregion, etc.). Often, the boundaries have little or nothing to do with the aggregated data, having been form for other reasons. Even though more and more non-aggregated data is collected (mobile phone locations and tweets, for example) much of the social science data available to us has been aggregated for anonymity reasons.   
+
+## Issues with areal data
+
+There are several issues you must considered when dealing with data that has been aggregated to areal units.
+
+- __Modifiable areal unit problem (MAUP)__: results of statistical anlaysis may and often do depend on the specific geographic unit used in the study. Both size and shape of the units can have an effect. We'll see several examples when we discuss spatial autocorrelation measures.
+
+- __Ecological fallacy__: results obtained from aggregated data cannot be assumed to apply to individual people. For instance, assume that you measured the math scores of a particular classroom and found that they had the highest average score in the district. Later you run into one of the kids from that class and you think to yourself "she must be a math whiz." That is a fallacy. Just because she comes from the class with the highest average doesn't mean that she is automatically a high-scorer in math. She could be the lowest math scorer in a class that otherwise consists of math geniuses.
+
+- __Non-uniformity of space__: phenomena  are not distributed evenly in space.
+
+- __Edge issues__: edges of the map, beyond which there is no data, can significantly affect results (we've seen this in point pattern analysis). 
+
+- __Spatial autocorrelation__: data from locations near to each other are usually more similar than data from locations far away from each other. This essentially leads to observations which are not independent. 
+
+Virtually all disciplines which deal with areal entities have dealt with these problems. Geographer's typically refer to it as _Tobler's Law_ (which only partially describes) while others will refer to _Galton's problem_. The problem is to establish how many effectively indpedendent observations are present, when arbitrary boundaries have been used to tesselate the study area. In 1889, Galton question questioned whether observations of marriage laws across areal entities constituted independent observations, since they could just reflect a general pattern from which they had all descended. So positive spatial dependence tends to reduce the amount of information contained in the observations, because the proximate observations can in part be used predict each other. 
+
+## Spatial concepts
+
+- __Distance__: the magnitude of spatial separation. Euclidean (straight line) distances often only an approximation and don't represent actual distance well (travel time on road networks, delays in connecting flights, more). 
+
+- __Adjacency or neighborhood__: nominal or sometimes binary (0,1) equivalent of distance. Levels of adjacency exist: 1st, 2nd, 3rd  nearest neighbor and so on. 2nd order adjacency is connection to another unit through one other unit. 3rd order is connection to another unit through two other units.
+
+- __Interaction__: the strength of the relationship between entities. This is typically an inverse function of distance but it doesn't have to be. It can also represent the physical ease with which people or wild animals move between units, the length of a shared boundary, or cooperation between governmental agencies (free trade for example), for example. 
+
+## Load necessary R packages
+
+There are several packages that we can use to work with areal data. We'll start with these six and show you a quick way to load them all at once.
+
+```{r}
+x <- c("spdep", "ggplot2", "ggmap", "rgdal", "rgeos", "maptools", "dplyr", "tidyr") # the packages
+```
+
+```{r, eval=FALSE}
+install.packages(x) # warning: this may take a number of minutes
+```
+
+```{r, results="hide"}
+lapply(x, library, character.only = TRUE) # load the required packages
+```
+
+# Working with spatial data in R
+
+Before we jump into defining neighborhoods, we need to spend a little time working with some spatial data in more common GIS formats. 
+
+First, lets look at some data which reports the locations (in X and Y coordinates, unkown system at the moment) in London of cycle hires. 
+
+```{r}
+cycle<- read.csv("London_cycle_hire_locs.csv", header=T)
+class(cycle)
+
+# Inspect the column headings
+head(cycle)
+
+# Summarize the columns
+summary(cycle)
+```
+
+A simple plot of the XY coordinates shows the spatial data.
+
+```{r}
+plot(cycle$X, cycle$Y)
+```
+
+However, just like in a GIS, this is not really a spatial data object in R (package `sp`). We can create a true spatial data object (and enable all the analytical functionality that goes with it) with the following command. By the way, most packages that work with spatial data in R have been written or updated to work some or all of the `sp` data objects.
+
+```{r}
+coordinates(cycle)<- c("X", "Y")
+```
+
+Now, look at the created object..
+
+```{r}
+class(cycle)
+str(cycle)
+```
+
+The class has become a `SpatialPointsDataFrame` which is a type of S4 object that requires handling slightly differently. The `str()` output contains lots of `@` symbols which denote a different slot (or collection of data types). Typing `cycle@data` will extract the attribute data. The X and Y locational information can now be found in the `coords` slot, while the `bbox` slot contains the bounding box coordinates and the `pro4string` slot contains the projection, or CRS (coordinate reference system) information. 
+
+```{r}
+# the attribute slot
+head(cycle@data)
+
+# the coordinate slot
+head(cycle@coords)
+
+# the bounding box slot
+cycle@bbox
+
+# the projection string (empty at this point)
+cycle@proj4string
+```
+
+We have not specified yet spectified the data projection that slot is empty at the moment. We therefore need to refer to the correct Proj4 string information. These are loaded with the rgdal package and can simply be referred to with an ID. To see the available Coordiante Reference Systems (CRS's) you use the following code. Note that this all comes from the Proj4 libary used in most open-source GIS packages. ESRI uses the same codes (for the most part).
+
+```{r}
+EPSG<- make_EPSG()
+head(EPSG)
+```
+
+Our cycle data is in British National Grid. We can search for this within the EPSG object as follows...
+
+```{r}
+with(EPSG, EPSG[grep("British National", note),])
+```
+
+and see that the code we are after is 27700. You can try this other systems. For example, to find the UTM Zone 15 code, you can type...
+
+```{r}
+# search for the string "zone=15" in the prj4 field
+utm_codes <- with(EPSG, EPSG[grep("+zone=15", prj4),])
+utm_codes[,c("code","note")]
+```
+
+There are 14, one for each datum and northern and southern hemisphere. We'll do this again later with the Arkansas State Plane North system. 
+
+We can assign the British National Grid CRS to our cycle data easily enough.
+
+```{r}
+# Save the string to BNG
+BNG <- CRS("+init=epsg:27700")
+
+# assign string to cycle spatial data object
+proj4string(cycle) <- BNG
+
+# look at the result to be sure
+cycle@proj4string
+```
+
+From this point we can combine the data with other spatial information and also perform transformations on the data. This is especially useful when exporting to other software. Shapefiles are extremely simple to import/export to/from an R session and are handled as spatial objects in the same way as above. In this case we are going to load in a SpatialPolygonsDataframe. We can specify the CRS when the data at this stage (it is _BNG_ as above).
+
+```{r}
+sport <- readShapePoly("london_sport.shp", proj4string= BNG)
+class(sport)
+```
+
+Note the shapefile was imported as a `SpatialPolygonsDataFrame`. Take a look at the attribute table headings (these are the values stored in the `data` slot).
+
+```{r}
+names(sport)
+```
+
+Also verify the correct CRS, 
+
+```{r}
+# should be the same as the cycle data
+sport@proj4string
+```
+
+Let's plot both objects to see what we have spatially (`plot` is overloaded for spatial objects).
+
+```{r}
+plot(sport, col="lightgrey")
+plot(cycle, add=T, col= "white", pch=21)
+```
+
+Refer to http://spatial.ly/2013/12/introduction-spatial-data-ggplot2/ to learn more about plotting and analysis of these data.
+
+To export the data as a shapefile use the following syntax for the point data:
+```{r}
+# writePointsShape(cycle, "cycle.shp")
+# writePolyShape(sport, "london_sport.shp")
+```
+
+Much of this content was adapted from a worksheet written by Dr Gavin Simpson (UCL Geography).
+
+# Defining neighborhoods and weights
+
+Before we can discuss methods to deal with the issues outlined above, we must establish a framework in which to think about the spatial concepts outlined above. Up to know, we have thought of spatial relationships in terms of distance - distance point events, distance of events from a covariate, etc. When we have aggregated _marked events_ to areal units, our concept of spatial relationship has to include other forms of relationship besides distance. Measuring distances between, say, centroids of polygons is not always (is rarely) a good measure of spatial proximity due to variable sized units and the unknown distribution of events within the unit. Instead, we tend to think in terms of _neighborhoods_ of _connected_ units. Connectivity aomong areal units is typically defined as a shared polygon point or points (i.e. a shared vertex or edge). However, connectivity could also be defined shared environmental, political or infrastructure entities (e.g. respectively, a stream reach or animal habitat, a trade agreeement, or a railroad). Connectivity must be based on the goals of the study itself and as such its definition represents significant _a priori_ knowledge. It is a critical component of model design and its impact on the outcome should not be underestimated. 
+
+After a _neigbhorhood_ is defined, the relative strength of the connected units within it may be considered. For example, longer shared boundaries between units may warrant a stronger connection. More or larger highways between units may warrent stronger relative connections. The strength of the connections is considered a _weight_ and stored in a _weight matrix_. The following section illustrates these concepts with a simple example. The section after that formalizes the concepts and introduces the data structures and commands used by the `spded` package.  
+
+## Simple example
+
+Consider the following tesselation of a region (selected tracts from Washington County). ![Washington County Tracts](C:\Users\jcothren\Dropbox\teaching\GEOS4863\Areal_Data_Notes\Simple_Example.png)
+
+We have looked at that application of distance matrices in point pattern analysis. In areal data analysis a more common and useful concept is that of a neigbhorhood. A neighborhood consists of a polygon (an areal unit) and all polygons that are connected to it in a way defined by the researcher and, hopefully, based on some meaningful geometric attributes. We'll start simply and assume a neighborhood is composed of a tract and all tracts that share a border (i.e. at least two sequential vertices) with it. Neighborhoods can be represented mathematically as an _adjacency matrix_.
+
+```{r}
+# create a list of polygon names (from the image)
+poly.names <- c('A','B','C','D','E','F','G','H')
+
+# manually create the adjacency matrix
+adjacency.matrix <- matrix(c(0,0,0,0,1,0,0,0,  0,0,1,0,0,0,0,0,  0,1,0,1,0,0,1,1, 0,0,1,0,1,1,1,0, 1,0,0,1,0,1,0,0, 0,0,0,1,1,0,1,1,  0,0,1,1,0,1,0,1, 0,0,1,0,0,1,1,0),nrow=8,ncol=8,byrow=TRUE,dimnames = list(poly.names,poly.names)) 
+
+adjacency.matrix
+```
+
+The adjacency matrix is a compact structure which tells us the connectivity between areal units. It has a one-to-one relationship with an undirected graph.  
+
+Second order adjacency can be easily computed with this data structure...
+
+```{r}
+second.order <- adjacency.matrix %*% adjacency.matrix
+second.order
+```
+
+Here, the entries tell you how many second order connections there are between pairs of polygons. While this is no longer binary, it does tell you that, for example, __A__ has only one second order connection to __F__ (through __E__). Likewise, __C__ has 3 second order connections to __F__ (through __G__, __H__, and __D__).
+
+```{r}
+third.order <- second.order %*% adjacency.matrix
+third.order
+```
+
+Now, because this dataset is so small, almost every polygon can be connected to another in "three steps". Only __A__ and __B__ remain unconnected.
+
+Often, you will work with _row normalized_ adjacency matrices.
+
+```{r}
+#row normalized
+adjacency.matrix.rn <- matrix(c(0,0,0,0,0,1,0,0,  0,0,1,0,0,0,0,0,  0,1/3,0,1/3,0,0,1/3,0, 0,0,1/4,0,1/4,1/4,1/4,0, 1/3,0,0,1/3,0,1/3,0,0, 0,0,0,1/4,1/4,0,1/4,1/4,  0,0,1/4,1/4,0,1/4,0,1/4, 0,0,1/3,0,0,1/3,1/3,0),nrow=8,ncol=8,byrow=TRUE,dimnames = list(poly.names,poly.names))
+
+adjacency.matrix.rn
+```
+
+We'll examine the effect of this later. So the _adjacency matrix_ represents our neighborhood. We can create an `spdep` `weights list` object from the matrix using the `mat2listw` command. 
+
+```{r}
+# skip nb object, go straight to listw from matrix
+W <- mat2listw(adjacency.matrix)
+W
+
+# but a neighborhood object is part of the listw
+W$neighbours
+
+W.rn <- mat2listw(adjacency.matrix.rn)
+```
+
+Note that this object contains a number of important attributes which describe the overall connectivity of the units (all the neighborhoods, not just one of them). In this case we see that the 8 regions (units) have 24 connections out of a possible `r 8^2` or `r 2400 / (8^2)`%. The average region has three connections. By querying the `W$neighbours` field (this is an `nb` object we'll see later) we can see our adjancency matrix stored differently.
+
+```{r}
+W$neighbours[2]  # unit 2 (B) connections
+W$neighbours[3]  # unit 3 (C) connections
+```
+
+The corresponding weights are stored in `W$weights`. In this case, they are all 1's.
+
+![Simple Example with Attributes](C:\Users\jcothren\Dropbox\teaching\GEOS4863\Areal_Data_Notes\Simple_Example_Attributes.png)
+
+```{r}
+# add attributes for polygons A-H
+y = c(27,51,45,47,54,18,7,52)
+```
+
+## Creating neighbors in `spdep`
+
+The R package `spdep` uses a neighborhood object, or `nb`, rather than an adjacency matrix. In this section we'll work through several different ways of defining neighbors. In the previous section we defined an adjacency matrix manually and then used it to create a `nb`. This helps you understand what's happening a little under the hood but it's also good to know in case you have odd connectivity criteria. Typically the creation of the object is handled internally and is based on a number of well-known criteria.
+
+### Contiguity Neighbors
+
+Polygon contiguity defined by shared boundaries or vertices is the most common connectivity method used. It is straighforward but you have to be careful, though, to make sure that your polygon dataset is topogologicaly intact. If there are overlaps among polygons or slivers between edges (i.e, the dataset must be _planar_), then your `nb` will not be correct. We'll not worry about that here. There are no R packages which allow you to this but QGIS and ArcGIS all have topology enforcing functions. This violates our "reproducibility" requirement in terms of scientific software but in this case it is more of a data issue than an analysis issue. Lattice structure are just assumed to be planar. However, the `poly2nb` function in `spdep` has a `snap` argument you can set to compensate for a non-planar dataset. The distance you specify for this argument is the distance at which two vertices are considered equivalent. 
+
+In `polynb`, the default connectivity condition is that two polygons share at least one vertex. This is the so-called _queen-contiguity_ condition. A more restrictive condition is _rook-continguity_ in which neighbors must share an edege. Let's create queen and rook contiguity `nb` objects and examine them using tract polygons from a Syracuse NY. 
+
+```{r}
+# load and plot the polygon layer
+syracuse <- readOGR(dsn=".", layer="Syracuse")  #note that there is no projection information (bad!)
+plot(syracuse,col='grey', main="Queen contiguity in blue, Rook in white")
+
+# create continuity nb
+cuse_nb_queen <- poly2nb(syracuse, queen=TRUE, row.names <- syracuse$AREAKEY)
+cuse_nb_rook <- poly2nb(syracuse, queen=FALSE, row.names <- syracuse$AREAKEY) 
+
+# compare using the plot command and the nb objects
+coords <- coordinates(syracuse) # extract the centroids of each tract
+plot(cuse_nb_queen, coords, col='blue', add=TRUE, lwd=5)
+plot(cuse_nb_rook, coords, col='white', add=TRUE)
+```
+
+Note that rook contiguity is a strict sub-set of queen contiguity.
+
+```{r}
+summary(cuse_nb_queen)
+summary(cuse_nb_rook)
+```
+
+### Graph-based Neighbors
+
+In the case of contingity neighbors we used the entire polygon to define connectivity. It is also possible to use the polygon centroid (or another point, perhaps a weighted centroid) as a representative point. Once representative points are available, then other measures can be used to define neighborhoods including graph-based neighbors, distance thresholds, and k-nearest neighbors.
+
+In general, we use a class called a proximity graph. There is a simply a graph in which two vertices are connected
+by an edge if and only if the vertices satisfy particular geometric requirements. The most direct graph representation of neighbors is to make a Delaunay triangulation of the points. The neighbor relationships are defined by the triangulation, which extends outwards to the convex hull of the points and which is planar. Note that graph-based representations construct the interpoint relationships based on Euclidean distance, with no option to use Great Circle distances
+for geographical coordinates. Because it joins distant points around the convex hull, it may be worthwhile to thin the triangulation as a Sphere of Influence (SOI) graph, removing links that are relatively long. Points are SOI neighbours if circles centred on the points, of radius equal to the points’ nearest neighbour distances, intersect in two places. The following code computes 1) the Delaunay triangulation of the centroids; 2) Sphere of Influence (SOI) neighbors; 3) Gabriel graph neighbors; and 4) relative graph neighbors. 
+
+```{r}
+IDs <- row.names(as(syracuse, "data.frame"))
+coords <- coordinates(syracuse)
+cuse_delaunay <- tri2nb(coords, row.names = IDs)
+cuse_soi <- graph2nb(soi.graph(cuse_delaunay, coords), row.names = IDs)
+cuse_gabriel <- graph2nb(gabrielneigh(coords), row.names = IDs)
+cuse_relative <- graph2nb(relativeneigh(coords), row.names = IDs)
+```
+
+```{r}
+par(mfrow = c(2,2))
+
+plot(syracuse,col='grey', main="delaunay")
+plot(cuse_delaunay, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="soi") #removing long edges
+plot(cuse_soi, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="gabriel") #removing long edges
+plot(cuse_gabriel, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="relative") #removing long edges
+plot(cuse_relative, coords, col='blue', add=TRUE)
+
+par(mfrow=c(1,1))
+```
+
+Delaunay triangulation neighbors and SOI neighbors are symmetric by design – if $i$ is a neighbour of $j$, then $j$ is a neighbour of $i$. The Gabriel graph is also a subgraph of the Delaunay triangulation, retaining a different set of neighbours (Matula and Sokal, 1980). It does not, however, guarantee symmetry; the same applies to Relative graph neighbours (Toussaint, 1980). The `graph2nb` function takes a `sym` argument to insert links to restore symmetry, but the graphs then no longer exactly fulfill their neighbor criteria. All the graph-based neighbour schemes always ensure that all the points will have at least one neighbour. Subgraphs of the full triangulation may also have more than one graph after trimming. The function `is.symmetric.nb` can be used to check for symmetry, with argument `force=TRUE` if the symmetry attribute is to be overridden, and `n.comp.nb` reports the number of graph components and the components to which points belong (after enforcing symmetry, because the algorithm assumes that the graph is not directed). When there are more than one graph component, the matrix representation of the spatial weights can become block-diagonal if observations are appropriately sorted. This is especially important in large datasets.
+
+### Distance-based neighbors
+
+Another method is to choose the $k$ nearest points as neighbors. This method is adaptive in that distance between neighbors varies across the study area, taking account of differences in the densities of areal entities. Naturally, in the majority of cases, it leads to asymmetric neighbours, but it will ensure that all areas have $k$ neighbours. The `knearneigh` function returns an intermediate form converted to an `nb` object by `knn2nb`. Note that `knearneigh` can also take a `longlat` argument to handle geographical coordinates and uses short geodesics as distances rather than euclidean distance.
+
+```{r}
+
+cuse_knn1 <- knn2nb(knearneigh(coords, k = 1), row.names = IDs) # closest neighbor
+cuse_knn2 <- knn2nb(knearneigh(coords, k = 2), row.names = IDs) # two closest neighbors
+cuse_knn4 <- knn2nb(knearneigh(coords, k = 4), row.names = IDs) # four closest neighbors
+
+par(mfrow = c(2,2))
+
+plot(syracuse,col='grey', main="nearest neighbor")
+plot(cuse_knn1, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="two nearest neighbors") 
+plot(cuse_knn2, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="four nearest neighbors") 
+plot(cuse_knn4, coords, col='blue', add=TRUE)
+
+par(mfrow=c(1,1))
+```
+
+The figures above show the neighbour relationships for $k = 1,2,4$, with many components for $k = 1$. If necessary, $k$-nearest neighbour objects can be made symmetrical using the `make.sym.nb` function. The large number of disjoint connected subgraphs in `cuse_knn1` while the other two graphs are completely connected.
+
+And we can check for symmetry and connectivity again.
+
+```{r}
+nb_l <- list(k1 = cuse_knn1, k2 = cuse_knn2, k4 = cuse_knn4)
+sapply(nb_l, function(x) is.symmetric.nb(x, verbose = FALSE, force = TRUE))
+sapply(nb_l, function(x) n.comp.nb(x)$nc)
+```
+
+The $k = 1$ object is also useful in finding the minimum distance at which all areas have a distance-based neighbour. Using the `nbdists` function, we can calculate a list of vectors of distances corresponding to the neighbor object, here for first nearest neighbors. The greatest value will be the minimum distance needed to make sure that all the areas are linked to at least one neighbour. The `dnearneigh` function is used to find neighbors with an interpoint distance, with arguments `d1` and `d2` setting the lower and upper distance bounds; it can also take a longlat argument to handle geographical coordinates.
+
+```{r}
+cuse_nn_dists <- unlist(nbdists(cuse_knn1, coords)) # a little tedious to get the distances from this list
+summary(cuse_nn_dists)
+```
+
+Now we can find the maximum distance between two neighbors and use that distance to compute neighbhors.
+
+```{r}
+cuse_max_1nn <- max(cuse_nn_dists) # which we saw in the summary above
+
+cuse_075_nb <- dnearneigh(coords, d1 = 0, d2 = 0.75 * cuse_max_1nn, row.names = IDs)
+cuse_100_nb <- dnearneigh(coords, d1 = 0, d2 = 1 * cuse_max_1nn, row.names = IDs)
+cuse_150_nb <- dnearneigh(coords, d1 = 0, d2 = 1.5 * cuse_max_1nn, row.names = IDs)
+
+par(mfrow = c(2,2))
+
+plot(syracuse,col='grey', main="0 to 0.75*max distance")
+plot(cuse_075_nb, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="0 to max distance") 
+plot(cuse_100_nb, coords, col='blue', add=TRUE)
+
+plot(syracuse,col='grey', main="0 to 1.5 * max distance") 
+plot(cuse_150_nb, coords, col='blue', add=TRUE)
+
+par(mfrow=c(1,1))
+```
+
+And check for symmetric and disjoint subgraphs.
+
+```{r}
+nb_l <- list(d1 = cuse_075_nb, d2 = cuse_100_nb , d3 = cuse_150_nb)
+sapply(nb_l, function(x) is.symmetric.nb(x, verbose = FALSE, force = TRUE))  # symmetric?
+sapply(nb_l, function(x) n.comp.nb(x)$nc) # number of disjoint subgraphs
+```
+
+The figure above shows how the numbers of distance-based neighbors increase with moderate increases in distance. Moving from 0:75 times the minimum all-included distance (1158 m), to the all-included distance (1545 m), and 1.5 times the minimum all-included distance (2317 m), the numbers of links grow rapidly. This is a major problem when some of the first nearest neighbor distances in a study area are much larger than others, since to avoid no-neighbour areal entities, the distance criterion will need to be set such that many areas have many neighbours. In Syracuse, the census tracts are of similar areas, but were we to try to use the distance-based neighbour criterion on the eight-county study area, the smallest distance securing at least one neighbour for every areal entity is over 38 km.
+
+```{r}
+# load the entire 8-county study area
+NY <- readOGR(dsn=".", layer="NewYorkTracts")
+NY_nb <- poly2nb(NY, queen=FALSE)
+
+plot(NY, col='lightgrey')
+plot(NY_nb, coordinates(NY), add=TRUE, col='blue')
+     
+ny_dists <- unlist(nbdists(NY_nb, coordinates(NY)))
+summary(ny_dists)
+```
+
+If the areal entities are approximately regularly spaced, using distance-based neighbours is not necessarily a problem. Provided that care is taken to handle the side effects of “weighting” areas out of the analysis, using lists of neighbours with no-neighbour areas is not necessarily a problem either, but certainly ought to raise questions. Different disciplines handle the definition of neighbours in their own ways by convention; in particular, it seems that ecologists frequently use distance bands. If many distance bands are used, then the results begin to approach the variogram, although the underlying understanding of spatial autocorrelation seems to be by contagion rather than continuous. 
+
+### Higher-order neighbors
+
+Distance bands can be generated by using a sequence of `d1` and `d2` argument values for the `dnearneigh` function. In this way we can construct a _spatial autocorrelogram_ as understood in ecology. In other conventions, correlograms are constructed by taking an input list of neighbours as the first-order sets, and stepping out across the graph to second-, third-, and higher-order neighbours (as we saw using the adjacency matrix above) based on the number of links traversed, but not permitting cycles, which could risk making $i$ a neighbour of $i$ itself. The `nblag` function takes an existing neighbour list and returns a list of lists, from first to `maxlag` order neighbours. It's easier to show this than explain.
+
+```{r}
+
+# we'll need to work with adjacency matrices for this so require the igraph package
+require(igraph)
+
+# create the list of nb lists
+cuse_nb_lags <- nblag(cuse_nb_queen, maxlag = 9)
+
+# create a table for easier viewing
+Table <- matrix(data=NA, nrow=63, ncol=9)
+
+```
+
+Table 1 shows how the wave of connectedness in the graph spreads to the third order, receding to the eighth order, and dying away at the ninth order – there are no tracts nine steps from each other in this graph. Both the distance bands and the graph step order approaches to spreading neighbourhoods can be used to examine the shape of relationship intensities in space, like the variogram, and can be used in attempting to look at the effects of scale.
+
+### Grid neighbors
+
+When the data are known to be arranged in a regular, rectangular grid, the `cell2nb` function can be used to construct neighbour lists, including those on a torus. These are useful for simulations, because, since all areal entities have equal numbers of neighbours, and there are no edges, the structure of the graph is as neutral as can be achieved. Neighbours can either be of type rook or queen (in image processing and GIS this is typically called 4-connected and 8-connected, respectively).
+
+```{r}
+cell2nb(7, 7, type = "rook", torus = TRUE)
+```
+
+When a regular, rectangular grid is not complete, then we can use knowledge of the cell size stored in the grid topology to create an appropriate list of neighbours, using a tightly bounded distance criterion. Neighbour lists of this kind are commonly found in ecological assays, such as studies of species richness at a national or continental scale. It is also in these settings, with moderately large $n$, here $n = 3,103$, that the use of a sparse, list based representation shows its strength. Handling a 281x281 matrix for the eight-county census tracts is feasible, easy for a 63x63 matrix for Syracuse census tracts, but demanding for a 3103 x 3103 matrix.
+
+```{r}
+data(meuse.grid)
+head(meuse.grid) # note the x and y columns with coordinate
+
+coordinates(meuse.grid) <- c("x", "y") # use the x and y columns to convert data.frame into SpatialPointsDataFrame
+gridded(meuse.grid) <- TRUE # confirm it is a grid type
+summary(meuse.grid)
+
+dst <- max(slot(slot(meuse.grid, "grid"), "cellsize")) # find the distance between grid points 
+
+# 4-connnected (rook)
+mg_nb <- dnearneigh(coordinates(meuse.grid), 0, dst) # create neigbhorhood contiguity by distance (from 0 to dst)
+mg_nb
+table(card(mg_nb))
+
+# 8-connected (queen)
+mg_nb_8 <- dnearneigh(coordinates(meuse.grid), 0, dst*sqrt(2)) # create neigbhorhood contiguity by distance (from 0 to dist*sqrt(2))
+mg_nb_8
+table(card(mg_nb_8))
+```
+
+There is a simpler way to do this but in the case of 4 and 8 connectivity. However, the distance method is more general and allows you to create distance rings as before. This is an important concept we'll encounter later. To see the simpler version, load this reasonably large Land Use Land Cover (LULC) dataset from Arkansas.
+
+```{r}
+# read lulc layer and convert numbers to factors (lulc classes found in the associated xml file)
+lulc <- readGDAL('IMAGE_DBO_LULC_FALL_CAST2006.tif')
+summary(lulc)
+```
+
+Note that this dataset is relatively small by todays standards and while R doesn't have trouble working with it, larger datasets can pose a problem. We need to convert the numbers to factors (classes).
+
+```{r}
+lulc$band1 <- as.factor(lulc$band1)
+summary(lulc)
+```
+
+Now the summary tells us how many cells of each class are in the data set. We can easily create a 4-connected `nb` object.
+
+```{r}
+# create weight matrix, rook, and note that we don't need the dataset itself (just it's size)
+# lulc_nb <- cell2nb(nrow(lulc),ncol(lulc), type='rook')
+# W <- nb2listw(w.grid)
+```
+
+This is not an efficient operation but we'll use the `lulc_nb` later when we discuss join-count methods.
+
+## Defining spatial weights
+
+Once you've defined a neighborhood you can begin to think about spatial weights as they apply to understanding spatial correlation and modeling. Spatial weights can be seen as a list of weights indexed by a list of neighbors, where the weight of the link between $i$ and $j$ is the $k$ th element of the $i$ th weights list component, and $k$ tells youwhich of the $i$ th neighbor list component values is equal to $j$. If you look at the simple example we started with this will make sense...
+
+```{r}
+# list of neighbors of C
+W$neighbours[3]
+
+# and their weights
+W$weights[3]
+```
+
+It is simple to create a weights object, `listw`, from an `nb` object. Let's work with the 8-county dataset from New York.
+
+```{r}
+NY_listw <- nb2listw(NY_nb, style = "B")
+
+# tenth tract in the list neighbors
+NY_listw$neighbours[10]
+
+# and their weights
+NY_listw$weights[10]
+```
+
+The `nb2listw` command creates the new object with binary, `style = "B"`, weights. We have other options for `style`: `W` is row standarized, `C` is globaly standardized (all weights sum to the number of units), `S` is variance-stablising (see `?nb2listw` for the reference that explains), and 'U' is equal to `C` divided by the number of neighbors (sums over all links is 1). The weights for `S` vary less than for `style="W"`  
+
+```{r}
+# row normalized weights
+NY_listw <- nb2listw(NY_nb, style = "W")
+
+# tenth tract in the list neighbors
+NY_listw$neighbours[10]
+NY_listw$neighbours[15]
+
+# and their weights
+NY_listw$weights[10]
+NY_listw$weights[15]
+```
+
+If you think about row-normalization for a moment you can see how it might be useful. While the `B` form sums the attributes of neighbors, the `W` form averages the attributes of neighbors. Because units at the edge of the study area tend to have fewer neighbors, their weights tend to be exagerated compared to highly connected units. Note also that when row-normalization is chosen, the weight matrix is no longer symmetric. 
+
+We can use the `unlist` function again to get some statistics on weights.
+
+```{r}
+NY_listw_B <- nb2listw(NY_nb, style = "B")
+NY_listw_C <- nb2listw(NY_nb, style = "C")
+NY_listw_W <- nb2listw(NY_nb, style = "W")
+NY_listw_U <- nb2listw(NY_nb, style = "U")
+
+# summaries of each
+summary(unlist(NY_listw_B$weights)) 
+summary(unlist(NY_listw_C$weights))
+summary(unlist(NY_listw_W$weights))
+summary(unlist(NY_listw_U$weights))
+
+# sums of each
+sum(unlist(NY_listw_B$weights))
+sum(unlist(NY_listw_C$weights))
+sum(unlist(NY_listw_W$weights))
+sum(unlist(NY_listw_U$weights))
+```
+
+You can also use the `glist` parameter to define your own list of weights. It must take the form of a list of weight vectors corresponding to the `neighbours` list. This is perhaps the most useful. For example, suppose you think that the strength of neighbor relationships attenuates with distance (as is often the case). The weights then would be inversely proportional to some power of the distance. You can use `nbdists` to calculate distances for an `nb` object (it will only calculate distances between neighbors). 
+
+```{r}
+# supply both nb object and centroids
+dists <- nbdists(NY_nb, coordinates(NY))
+
+# this returns a list object of type nbdist, here the distances between the neighbors of unit 3
+dists[3]
+
+# now, calculate inverse distance weights, using lapply to calculate for all members of the dists lists
+idw <- lapply(dists, function(x,p) 1/(x/1000)^p, 1)
+NY_linkw <- nb2listw(NY_nb, glist = idw, style = 'B')
+
+#this returns a list of weights
+idw[3]
+
+# that are included in the NY_weights object
+NY_linkw$weights[3]
+summary(unlist(NY_linkw$weights))
+
+# if the connection strength falls off more rapidly, we can use the inverse of the squared distance
+idw <- lapply(dists, function(x,p) 1/(x/1000)^p, 2)
+NY_linkw <- nb2listw(NY_nb, glist = idw, style = 'B')
+summary(unlist(NY_linkw$weights))
+```
+
+### Visualizing weight matrices
+
+Sometimes it is useful to visualize weight matrices. Patterns can sometimes reveal structure that is implied by your definition of connectivity.
+
+```{r}
+W <- listw2mat(NY_linkw)
+W[W==0] <- NA
+image(W)
+```
+
+Now, we may move on to measures of autocorrelation.
+
+# Measures of Spatial Autocorrelation
+
+There are many measures of spatial autocorrelation. In general, we place them in to categories - global and local. To illustrate the difference, we will derive Moran's I statistic for which there is both a local and global version.
+
+## Moran's _I_
+
+__This section is under development...__
+```{r}
+# compute Moran's I (you don't usually call this, after all, why supply n and SO when it can be computed)
+# I <- moran(y,W,8,24)
+```
+
+
+```{r}
+# usually call moran.test and moran.mc
+
+# to test significance use inferential techniques based on probability distriubtions
+# I.test <- moran.test(y,W,alternative='two.sided')
+# I.test
+
+# try with row normalization (effectively down-weighting the influence of D, F and G, the most connected polygons)
+# I.test.rn <- moran.test(y,W.rn,alternative='two.sided')
+
+```
+
+Not much difference here, same results basically although if alpha=5% then one passes, one fails on strict adherence to inference. But here our "sample" is so small this is an insignificant difference. We'll see its potential effect on real data later.
+
+```{r}
+# # to test significance, use a monte carlo permuations of assignment y to polygons A-H
+# 
+# 
+# I.mc <- moran.mc(y,W,20,alternative='greater')
+# 
+# 
+# # plots of a polygon's y versus it's neighbor average are useful
+# moran.plot(y,W)
+# 
+# 
+# 
+# 
+
+# 
+# # CONTIQUITY-BASED INTERACTION
+# 
+# # now, create a spatial- interaction or connection or weight matrix (named depending on your application generally)
+# # first, using QUEEN contiguity
+# IDs <- row.names(as(nc_SP, 'data.frame'))
+# nc_nbq <- poly2nb(nc,row.names=IDs)
+# 
+# # see what information you can get about the spatial connections...
+# nc_nbq
+# summary(nc_nbq)
+# 
+# # cardinality (i.e. the number of connections for each row)
+# card(nc_nbq)
+# 
+# # and plot...
+# plot(nc,border='gray')
+# plot(nc_nbq,coordinates(nc),col='blue', add=T)
+# title(main='Queen Contiguity Connectivity')
+# text(coordinates(nc), label=nc$FIPSNO, cex=0.5)
+# 
+# # now, using ROOK contiguity
+# nc_nbr <- poly2nb(nc,queen=F)
+# card(nc_nbr)
+# 
+# plot(nc,border='gray')
+# plot(nc_nbr,coordinates(nc),col='green',add=T)
+# title(main='Rook Contiguity Connectivity')
+# text(coordinates(nc), label=nc$FIPSNO, cex=0.5)
+# 
+# # CREATING WEIGHTS BETWEEN OBJECTS
+# # so far we've just created links, or neigbhorhoods, and stored them in the nb class, now
+# # we'll look at functions of distance to create true weight matrices
+# 
+# # first, use nbdists to compute the distances between the neighbors, e.g. k=1
+# # again, using nbdists as we did a few lines up
+# 
+# # built-in weight generating functions
+# 
+# # "W" = row-standardized, weights sum to 1 for all entities, weights represent a percentage 
+# # influence of each neighbor on the entity.
+# nc_nbq_wr <- nb2listw(nc_nbq, style = "W")
+# 
+# # "B" = binary (ie. no normalization, 1=linked, 0=not-linked), sums of weights differ according
+# # to number of neighbors
+# nc_nbq_wb <- nb2listw(nc_nbq, style="B")
+# 
+# # "C" = complete set of weights for all links sum to the number of entities
+# nc_nbq_wc <- nb2listw(nc_nbq, style="C")
+# 
+# # "U" = complete set of weights sum to unity 
+# nc_nbq_wu <- nb2listw(nc_nbq, style = "U")
+# 
+# # "S", "W", also
+# 
+# # Spatial Autocorrelation - compute Moran's I using the different listw's you created for the NC dataset. First the SID74 variable (number of SID's cases by county in 1974)
+# moran.test(nc_SP$SID74,nc_nbq_wr)
+# moran.plot(nc_SP$SID74,nc_nbq_wr)
+# 
+# # the slope of the line in this plot is simply lm(wx~x) : that is, the least squares line fit to the polygon values versus the weighted sum of their neighbors
+# # remeber that the slope of the regression line is the correlation coefficient of the two fitted values? Moran's I, as the correlation coef of these two values, is thus the slope of this line.
+# 
+# # what effect does row normalization have?
+# moran.test(nc_SP$SID74,nc_nbq_wb)
+# 
+# # a huge effect 3x more likely to be random. normalized W creates greater influence of lesser connected counties? this ought to always be investigated.
+# 
+# # sometimes, it's better to try a monte carlo permutation approach
+# nc.moran.perms <- moran.mc(nc_SP$SID74,nc_nbq_wr,nsim=1000)
+# 
+# # use plot to see the frequency distribution of Moran I results for the permutations
+# plot(nc.moran.perms)
+# 
+# 
+# # CATEGORICAL DATA (JOIN COUNTS)
+# # Moran's I and Geary's C can only be applied to continuous data.  When dealing with categorical data, a measure called Joins-Count statistic is used (see Unwin and O'Sullivan, page 211). This approach is similar to many fragmentation statistics and measures the occurrence of similar neighbors versus dissimilar neibhgbors. For example, it quantifies the frequency of a forest/urban vs. forest/forest vs. forest/water vs. water/forest vs. water/urban contiquity.  
+# 
+# # easy example designed by classifying NC SIDS data as above median and below median
+# summary(nc_SP$SID74)
+# sids.rank <- cut(nc_SP$SID74, breaks=c(-1,4,45),labels=c('below-median','above-median'))
+# names(sids.rank) <- rownames(nc_SP$names)
+# joincount.mc(sids.rank, nc_nbq_wr,nsim=1000)
+# 
+# 
+# # read lulc layer and convert numbers to factors (lulc class found in xml file)
+# lulc<-readGDAL('IMAGE_DBO_LULC_FALL_CAST2006.tif')
+# lulc$band1 <- as.factor(lulc$band1)
+# 
+# # reduce size for our class (this is a case where a HPC might be useful)
+# lulc <- lulc[1000:2000,1000:2000]
+# 
+# # create weight matrix (simple rook)
+# w.grid <- cell2nb(nrow(lulc),ncol(lulc), type='rook')
+# W <- nb2listw(w.grid)
+# 
+# joincount.multi()
+```
+
+## Geary's _C_
+
+## Getis-Ord 
+
+## Join count statistics
+
+## The Modifiable Areal Unit Problem (MAUP)
+
+
