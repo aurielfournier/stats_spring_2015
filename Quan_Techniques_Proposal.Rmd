@@ -1,0 +1,59 @@
+---
+output: pdf_document
+bibliography: DDIG.bib
+---
+
+# Assessing differences in detection probability of Sora between observers through point pattern analysis
+### Auriel M.V. Fournier
+### Quanitative Techniques 2015
+
+### Introduction
+
+Monitoring rail populations is difficult because rails are very secretive, and live in habitats that make detecting them very challenging. This is especially true in the fall when they also do not vocalize readily, so surveys where a call is played and their response listened for are not effective [@Conway2011]. Based on the work of Perkins et al [-@Perkins2010] we saw that ATVs were an effective method of catching rails in shallow water wetlands and so we designed this survey method to see if it could be used to survey for them as well. 
+
+The migratory game bird support task force for rails and snipe has identified fall as an important time of year to examine rail populations because wetland water level mangement results in little water being available on the landscape in early fall, so the rails are thought to be concentrated around the remaining water [@Strategy2009]. This limited water may also cause an increase in mortality, either through predation or competition, so understanding their population dynamics is important so that wetland management can be adjusted (if needed) to better suit rails. Sora (*Porzana carolina*) are the most common rail observed during our fall migration surveys and have enough detections (n=3190) to make a comparison of the point patterns feasible.  
+
+### Methods
+
+#### Data Collection
+
+In 2013 and 2014 observers went out on ATVs a half hour after sunset to survey for rails. The 3 hour survey period each night was split into two one and a half hour blocks. In the first block observer A would be in Impoundment 1 and observer B would be in impoundment 2, and they would survey for an hour and a half. Then in the second time block they would switch (observer A in impoundment 2, etc). We originally designed this study this way to increase our chances of having multiple observations of rare rail species so that our occupancy analysis power could be improved. It has also give us marked point patterns to compare the observations of common rail species (Sora) between the two survey periods. 
+
+```{r, fig.width=4, fig.height=4, message=F, echo=F, warning=F, results='hide'}
+
+library(reshape2)
+library(reshape)
+library(maps)
+library(mapdata)
+library(rgdal)
+library(ggplot2)
+library(gridExtra)
+setwd("C:/Users/avanderlaar/Documents/GitHub/data")
+dat<- read.csv('all_birds.csv',header=T)
+dat <- dat[dat$year==2014,]
+dat3 <- dat[dat$round==3,]
+
+
+nv <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="nv_impound")
+nv <- spTransform(nv, CRS("+proj=longlat +datum=WGS84"))
+
+ggplot()+
+  geom_polygon(data=nv, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  geom_point(data=dat3, aes(x=long, y=lat, group=obs, colour=obs))+
+  xlim(-95.06,-95.04)+
+  ylim(40.075, 40.11)+
+  ggtitle("Three wetland units surveyed in 2014")
+  
+```
+
+The data now is a marked point pattern across 13 different sites, 36 different wetland units (the unit of interest) and two years. Four observers surveyed across the two years, four in 2013, and two in 2014 (the two in 2014 were part of the 4 in 2013). Each point is marked with it's year, the date of the survey, the distance from the survey line and it's observer so that it can be subsetted to compare the point patterns from observer A and observer B on the same night in the same year. 
+
+#### Analysis
+
+I will write a script that will look at each point in the first group and find it's nearest adjacent point in the second group, record the straight line distance, remove both points from the data set, and move onto the next point. Then I will look at the distribution of distances. 
+
+### Implications
+
+Noctural ATV surveys for rails are a new method for assessing abundance and our hope is to show whether or not they are effective so that future projects studying fall migration of rails have a methodology to use. Fall migration is thought to be a high mortality time of year because of environmental constraints so monitoring their populations during this time is vital to continued rail conservation and management. 
+
+### Works Cited

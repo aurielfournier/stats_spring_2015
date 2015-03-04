@@ -251,7 +251,7 @@ We have not specified yet spectified the data projection that slot is empty at t
 
 
 ```r
-EPSG<- make_EPSG()
+EPSG <- make_EPSG()
 head(EPSG)
 ```
 
@@ -1309,20 +1309,6 @@ summary(unlist(NY_linkw$weights))
 ##   0.00068   0.01195   0.08404   0.55800   0.42020 146.20000
 ```
 
-### Visualizing weight matrices
-
-Sometimes it is useful to visualize weight matrices. Patterns can sometimes reveal structure that is implied by your definition of connectivity.
-
-
-```r
-W <- listw2mat(NY_linkw)
-W[W==0] <- NA
-image(W)
-```
-
-![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-46-1.png) 
-
-Now, we may move on to measures of autocorrelation.
 
 # Measures of Spatial Autocorrelation
 
@@ -1332,9 +1318,108 @@ There are many measures of spatial autocorrelation. In general, we place them in
 
 __This section is under development...__
 
+Moran's I is simply the ratio of the covariance between a unit and the weighted sum of it's neighbors (it's spatial lag) and the variance of the entire study area. The ratio is adjusted using the weights so that it falls between -1 and 1.
+
+For unit I, the local Moran statistic is defined (by Luc Anselin) as...
+$$I_{i} = \frac{n}{\sum_{j=1}^{n} w_{ij}}\frac{(y_{i} - \bar{y}){\sum_{j=1}^{n} (y_{j} - \bar{y})w_{ij}}}{\sum_{i=1}^{n}(y_i-\bar{y})^{2}}$$.
+
+The first term is the weight scaling term while the second term is the covariance/variance ratio. It is important to note that $\sigma_{y}^2$ is the biased versus (using $n$ rather than $n-1$).
+
+If the covariance term is positive then the unit and it's spatial lag are positively correlated to some degree. If negative then the are negatively correlated. Spatial lags are an important concept.
+
+
 ```r
-# compute Moran's I (you don't usually call this, after all, why supply n and SO when it can be computed)
-# I <- moran(y,W,8,24)
+# using the simple example from about
+y = c(27,51,45,47,54,18,7,52)
+
+# create the difference from mean vector
+yb = y -  mean(y)
+
+# the spatial lags can be created using the weight objects we created above. First the "B" (binary) version
+lag.listw(W,yb)
+```
+
+```
+## [1]  16.375   7.375   6.500 -26.500 -20.875   9.500  11.500 -42.875
+```
+
+Note that the lag vector is the sum of the values of it's neighbors (difference from the overal mean). If we use the row normalized `listw` object, we get the averge of the values.  This illustrates one of the differences between row normalization...
+
+
+```r
+lag.listw(W.rn, yb)
+```
+
+```
+## [1] -19.625000   7.375000  -2.625000  -6.625000  -6.958333   2.375000
+## [7]   2.875000 -14.291667
+```
+
+The Moran plot is used to display these...
+
+
+```r
+moran.plot(yb,listw = W)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-48-1.png) 
+
+The quadrants tell you the relative differences between a unit and it's neighbors. The upper left quadrant show units with values below the mean but with neighbors above. Upper right - both are above the mean. Lower left, both are below the mean. Lower right, unit is above but neighbors are below.
+
+Now, let's manually construct the local Moran I statistic using the simple example.
+
+
+```r
+## Moran's I (local -> global)
+n <- length(yb)
+
+I <- vector(length=8)
+for (local in seq(1:8)) {
+  first.term <- n/sum(unlist(W.rn$weights[local])) 
+  second.term <-  (yb[local] * sum(yb[unlist(W.rn$neighbours[local])] %*% unlist(W.rn$weights[local])))/sum(yb^2)
+  
+  I[local] <- first.term * second.term
+}
+
+# local Moran (LISA) for each unit
+I
+```
+
+```
+## [1]  0.74740969  0.35357043 -0.06939233 -0.22262672 -0.40841968 -0.16706805
+## [7] -0.31559787 -0.73639503
+```
+
+The global Moran's I is the average of the locals...
+
+
+```r
+global.I <- sum(I)/n
+global.I
+```
+
+```
+## [1] -0.1023149
+```
+
+Compare this to the `moran.test` output
+
+```r
+moran.test(y,W.rn)
+```
+
+```
+## 
+## 	Moran's I test under randomisation
+## 
+## data:  y  
+## weights: W.rn  
+## 
+## Moran I statistic standard deviate = 0.1761, p-value = 0.4301
+## alternative hypothesis: greater
+## sample estimates:
+## Moran I statistic       Expectation          Variance 
+##       -0.10231494       -0.14285714        0.05297952
 ```
 
 
@@ -1350,127 +1435,663 @@ __This section is under development...__
 # I.test.rn <- moran.test(y,W.rn,alternative='two.sided')
 ```
 
-Not much difference here, same results basically although if alpha=5% then one passes, one fails on strict adherence to inference. But here our "sample" is so small this is an insignificant difference. We'll see its potential effect on real data later.
-
-
-```r
-# # to test significance, use a monte carlo permuations of assignment y to polygons A-H
-# 
-# 
-# I.mc <- moran.mc(y,W,20,alternative='greater')
-# 
-# 
-# # plots of a polygon's y versus it's neighbor average are useful
-# moran.plot(y,W)
-# 
-# 
-# 
-# 
-
-# 
-# # CONTIQUITY-BASED INTERACTION
-# 
-# # now, create a spatial- interaction or connection or weight matrix (named depending on your application generally)
-# # first, using QUEEN contiguity
-# IDs <- row.names(as(nc_SP, 'data.frame'))
-# nc_nbq <- poly2nb(nc,row.names=IDs)
-# 
-# # see what information you can get about the spatial connections...
-# nc_nbq
-# summary(nc_nbq)
-# 
-# # cardinality (i.e. the number of connections for each row)
-# card(nc_nbq)
-# 
-# # and plot...
-# plot(nc,border='gray')
-# plot(nc_nbq,coordinates(nc),col='blue', add=T)
-# title(main='Queen Contiguity Connectivity')
-# text(coordinates(nc), label=nc$FIPSNO, cex=0.5)
-# 
-# # now, using ROOK contiguity
-# nc_nbr <- poly2nb(nc,queen=F)
-# card(nc_nbr)
-# 
-# plot(nc,border='gray')
-# plot(nc_nbr,coordinates(nc),col='green',add=T)
-# title(main='Rook Contiguity Connectivity')
-# text(coordinates(nc), label=nc$FIPSNO, cex=0.5)
-# 
-# # CREATING WEIGHTS BETWEEN OBJECTS
-# # so far we've just created links, or neigbhorhoods, and stored them in the nb class, now
-# # we'll look at functions of distance to create true weight matrices
-# 
-# # first, use nbdists to compute the distances between the neighbors, e.g. k=1
-# # again, using nbdists as we did a few lines up
-# 
-# # built-in weight generating functions
-# 
-# # "W" = row-standardized, weights sum to 1 for all entities, weights represent a percentage 
-# # influence of each neighbor on the entity.
-# nc_nbq_wr <- nb2listw(nc_nbq, style = "W")
-# 
-# # "B" = binary (ie. no normalization, 1=linked, 0=not-linked), sums of weights differ according
-# # to number of neighbors
-# nc_nbq_wb <- nb2listw(nc_nbq, style="B")
-# 
-# # "C" = complete set of weights for all links sum to the number of entities
-# nc_nbq_wc <- nb2listw(nc_nbq, style="C")
-# 
-# # "U" = complete set of weights sum to unity 
-# nc_nbq_wu <- nb2listw(nc_nbq, style = "U")
-# 
-# # "S", "W", also
-# 
-# # Spatial Autocorrelation - compute Moran's I using the different listw's you created for the NC dataset. First the SID74 variable (number of SID's cases by county in 1974)
-# moran.test(nc_SP$SID74,nc_nbq_wr)
-# moran.plot(nc_SP$SID74,nc_nbq_wr)
-# 
-# # the slope of the line in this plot is simply lm(wx~x) : that is, the least squares line fit to the polygon values versus the weighted sum of their neighbors
-# # remeber that the slope of the regression line is the correlation coefficient of the two fitted values? Moran's I, as the correlation coef of these two values, is thus the slope of this line.
-# 
-# # what effect does row normalization have?
-# moran.test(nc_SP$SID74,nc_nbq_wb)
-# 
-# # a huge effect 3x more likely to be random. normalized W creates greater influence of lesser connected counties? this ought to always be investigated.
-# 
-# # sometimes, it's better to try a monte carlo permutation approach
-# nc.moran.perms <- moran.mc(nc_SP$SID74,nc_nbq_wr,nsim=1000)
-# 
-# # use plot to see the frequency distribution of Moran I results for the permutations
-# plot(nc.moran.perms)
-# 
-# 
-# # CATEGORICAL DATA (JOIN COUNTS)
-# # Moran's I and Geary's C can only be applied to continuous data.  When dealing with categorical data, a measure called Joins-Count statistic is used (see Unwin and O'Sullivan, page 211). This approach is similar to many fragmentation statistics and measures the occurrence of similar neighbors versus dissimilar neibhgbors. For example, it quantifies the frequency of a forest/urban vs. forest/forest vs. forest/water vs. water/forest vs. water/urban contiquity.  
-# 
-# # easy example designed by classifying NC SIDS data as above median and below median
-# summary(nc_SP$SID74)
-# sids.rank <- cut(nc_SP$SID74, breaks=c(-1,4,45),labels=c('below-median','above-median'))
-# names(sids.rank) <- rownames(nc_SP$names)
-# joincount.mc(sids.rank, nc_nbq_wr,nsim=1000)
-# 
-# 
-# # read lulc layer and convert numbers to factors (lulc class found in xml file)
-# lulc<-readGDAL('IMAGE_DBO_LULC_FALL_CAST2006.tif')
-# lulc$band1 <- as.factor(lulc$band1)
-# 
-# # reduce size for our class (this is a case where a HPC might be useful)
-# lulc <- lulc[1000:2000,1000:2000]
-# 
-# # create weight matrix (simple rook)
-# w.grid <- cell2nb(nrow(lulc),ncol(lulc), type='rook')
-# W <- nb2listw(w.grid)
-# 
-# joincount.multi()
-```
+Not much difference here, same results basically although if alpha=5% then one passes, one fails on strict adherence to inference. But here our "sample" is so small this is an insignificant difference. We'll look a more realistic result later.
 
 ## Geary's _C_
 
+$$C = \frac{(n-1)\sum_{i}^{n}\sum_{j}^{n} w_{ij}(y_i-y_j)^2}{2(\sum_{i}^{n}\sum_{j}^{n}w_{ij},\sum_{i}^{n}(y_i-\bar{y})^2)}$$
+
+Values range from 0 (perfect correlation) to 2 (perfect dispersion).
+
 ## Getis-Ord 
+
+This is actually a _hot-spot_ tool as such identifies units which are different from their neightbors. It is, as such, a local static (no global equivalent). For a unit $i$
+
+$$G^{*}_{i} = \frac{\sum_{j=1}^{n}w_{ij}x{j} - \bar{X}\sum_{j=1}^{n}w_{ij}}{S\sqrt{\frac{[n\sum_{j=1}^{n}w^{2}_{ij} - (\sum_{j=1}^{n}w_{ij})^2]}{n-1}}}$$
+
+This is standardized score. Higher positive scores imply clustering of high positive values. Higher negative scores indicate clustering of high negative values.
+
+
+```r
+localG(y, W, zero.policy=NULL, spChk=NULL)
+```
+
+```
+## [1]  0.85719462  0.54562160  0.43032440 -0.85676616 -0.59080479 -0.07576748
+## [7] -0.32957653 -1.53751699
+## attr(,"gstari")
+## [1] FALSE
+## attr(,"call")
+## localG(x = y, listw = W, zero.policy = NULL, spChk = NULL)
+## attr(,"class")
+## [1] "localG"
+```
 
 ## Join count statistics
 
-## The Modifiable Areal Unit Problem (MAUP)
+Moran's I and Geary's C can only be applied to continuous data.  When dealing with categorical data, a measure called Joins-Count statistic is used (see Unwin and O'Sullivan, page 211) to assess clustering or dispersion. This approach is similar to many fragmentation statistics and measures the occurrence of similar neighbors versus dissimilar neibhgbors. For example, it quantifies the frequency of a forest/urban vs. forest/forest vs. forest/water vs. water/forest vs. water/urban contiguity. 
+
+So, for example, in the simplist case a binary variable is mapped into two categories (_Black_ and _White_), such that a join or edge, is classified as either $WW (0-0)$, $BB (1-1)$, $BW (0-1)$. Join count statistics can tell you if
+
+* the number of $BW$ joins is significantly lower than what we would expect by chance (_clustering_)
+* the number of $BW$ joins is signficanlty higher than what we would expect by chance (_dispersion_)
+* the number of $BW$ joins is approximately the same as what we would expect by chance
+
+the respective probabilities of observing the two types of units are $$P_B = \frac{n_B}{n}    P_W = \frac{n-n_W}{n} = 1 - P_B$$ 
+
+The probability of $BB$ and $WW$ in two adjacent cells are $$P_{BB} = P_{B}P_{B}  P_{WW} = (1 - P_{B})(1 - P_{B}) = (1 - P_{B})^2$$
+
+The probability of $BW$ in two adjacent cells is $$P_{BW} = P_{B}(1 - P_{B}) + (1 - P_{B})P_{B} = 2P_P{B}(1 - P_{B})$$
+
+We can count the number of joins (binary or multiple levels) and compare it to our expections $$E[BB] = \frac{1}{2}\sum_i\sum_j w_{ij}P_{B}^2$$ and
+$$E[BW] = \frac{1}{2}\sum_i\sum_j w_{ij}2P_{B}(1 - P_{B})$$
+
+The variance for each of these can be computed as well but is quite complex. Given the expection and variance of the join counts, we can compute a test statistic $$Z(BW) = \frac{BW - E[BW]}{\sqrt{\sigma^{2}_{BW}}}$$
+
+This is what `joincount.test` does. We can also use `jointcount.mc` in much the same way we used `moran.mc` to randomly redistribute the values and compute a distribute of outcomes. `jointcount.multi` allows a non-binary variable of interest. The LULC landcover example shows a practical example of its use.
+
+
+```r
+# read lulc layer and convert numbers to factors (lulc classes found in xml file)
+lulc<-readGDAL('IMAGE_DBO_LULC_FALL_CAST2006.tif')
+```
+
+```
+## IMAGE_DBO_LULC_FALL_CAST2006.tif has GDAL driver GTiff 
+## and has 2824 rows and 4550 columns
+```
+
+```r
+lulc$band1 <- as.factor(lulc$band1)
+
+# reduce size for this document (this is a case where AHPCC might be useful)
+lulc <- lulc[1500:1700,1500:1700]
+ 
+# create weight matrix (simple rook)
+w.grid <- cell2nb(nrow(lulc),ncol(lulc), type='rook')
+W <- nb2listw(w.grid)
+
+lulc.jc <- joincount.multi(lulc$band1,W)
+head(lulc.jc)
+```
+
+```
+##         Joincount     Expected     Variance   z-value
+## 11:11       76.00 4.673391e+00 2.266293e+00  47.37983
+## 13:13        1.00 2.252475e-03 1.125555e-03  29.73975
+## 31:31        5.50 1.227723e-02 6.129424e-03  70.09424
+## 41:41      113.75 9.807178e-01 4.835793e-01 162.16495
+## 51:51      749.00 1.633951e+02 6.766728e+01  71.18940
+## 100:100  12594.75 8.982556e+03 4.985554e+02 161.77608
+```
+
+
+## A case study - North Carolina SIDS
+A classic case-study in epidemiology examines the spatial characteristics of SIDs in North Carolina. 
+
+
+```r
+nc <- readOGR(dsn=".", layer="sids")
+```
+
+```
+## OGR data source with driver: ESRI Shapefile 
+## Source: ".", layer: "sids"
+## with 100 features and 20 fields
+## Feature type: wkbPolygon with 2 dimensions
+```
+
+```r
+nc@proj4string <- CRS("+proj=longlat +datum=NAD27")
+
+# transform to state plane system
+nc_SP <- spTransform(nc, CRS("+init=epsg:3358"))
+
+# first, QUEEN contiguity
+IDs <- row.names(as(nc_SP, 'data.frame'))
+nc_nbq <- poly2nb(nc,row.names=IDs)
+ 
+# see what information you can get about the spatial connections...
+nc_nbq
+```
+
+```
+## Neighbour list object:
+## Number of regions: 100 
+## Number of nonzero links: 490 
+## Percentage nonzero weights: 4.9 
+## Average number of links: 4.9
+```
+
+```r
+summary(nc_nbq)
+```
+
+```
+## Neighbour list object:
+## Number of regions: 100 
+## Number of nonzero links: 490 
+## Percentage nonzero weights: 4.9 
+## Average number of links: 4.9 
+## Link number distribution:
+## 
+##  2  3  4  5  6  7  8  9 
+##  8 15 17 23 19 14  2  2 
+## 8 least connected regions:
+## 20 21 26 27 64 68 74 88 with 2 links
+## 2 most connected regions:
+## 48 62 with 9 links
+```
+
+```r
+# cardinality (i.e. the number of connections for each row)
+card(nc_nbq)
+```
+
+```
+##   [1] 6 4 3 4 3 5 6 5 5 3 7 7 5 6 3 3 4 6 8 3 2 2 5 4 6 6 2 2 7 5 6 5 5 7 7
+##  [36] 3 5 3 5 4 6 7 7 6 5 3 5 4 9 4 7 5 3 6 6 6 5 3 6 5 3 7 9 7 2 4 4 5 2 3
+##  [71] 7 3 4 7 2 6 5 5 5 6 6 7 4 6 4 5 4 4 2 4 3 7 5 5 4 6 8 6 5 4
+```
+
+```r
+# and plot...
+plot(nc_SP,border='darkgrey', col='lightgrey')
+plot(nc_nbq,coordinates(nc),col='blue', add=T)
+title(main='Queen Contiguity Connectivity')
+text(coordinates(nc), label=nc$FIPSNO, cex=0.5)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-55-1.png) 
+
+```r
+# now, ROOK contiguity
+nc_nbr <- poly2nb(nc,queen=F)
+card(nc_nbr)
+```
+
+```
+##   [1] 6 4 3 4 3 5 6 5 5 3 6 6 5 6 3 3 4 5 8 3 2 2 4 4 6 6 2 2 6 5 6 5 5 6 5
+##  [36] 3 5 3 5 4 5 6 7 5 4 3 4 4 9 4 6 5 3 6 5 6 5 3 6 5 3 6 8 5 2 4 4 5 2 3
+##  [71] 7 3 4 7 2 6 4 5 4 5 6 7 3 5 3 5 4 3 2 4 3 6 4 5 4 6 8 6 5 4
+```
+
+```r
+plot(nc,border='gray')
+plot(nc_nbr,coordinates(nc),col='green',add=T)
+title(main='Rook Contiguity Connectivity')
+text(coordinates(nc), label=nc$FIPSNO, cex=0.5)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-55-2.png) 
+
+```r
+# first, use nbdists to compute the distances between the neighbors, e.g. k=1 again, using nbdists as we did a few lines up
+
+# "W" = row-standardized, weights sum to 1 for all entities, weights represent a percentage influence of each neighbor on the entity.
+nc_nbq_wr <- nb2listw(nc_nbq, style = "W")
+
+# "B" = binary (ie. no normalization, 1=linked, 0=not-linked), sums of weights differ according to number of neighbors
+nc_nbq_wb <- nb2listw(nc_nbq, style="B")
+ 
+# "C" = complete set of weights for all links sum to the number of entities
+nc_nbq_wc <- nb2listw(nc_nbq, style="C")
+# 
+# "U" = complete set of weights sum to unity 
+nc_nbq_wu <- nb2listw(nc_nbq, style = "U")
+ 
+# Spatial Autocorrelation - compute Moran's I using the different listw's you created for the NC dataset. First the SID74 variable (number of SID's cases by county in 1974)
+moran.test(nc_SP$SID74,nc_nbq_wr)
+```
+
+```
+## 
+## 	Moran's I test under randomisation
+## 
+## data:  nc_SP$SID74  
+## weights: nc_nbq_wr  
+## 
+## Moran I statistic standard deviate = 2.5192, p-value = 0.00588
+## alternative hypothesis: greater
+## sample estimates:
+## Moran I statistic       Expectation          Variance 
+##       0.147740529      -0.010101010       0.003925567
+```
+
+```r
+moran.plot(nc_SP$SID74,nc_nbq_wr)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-55-3.png) 
+
+The slope of the line in the `moran.plot` result is simply `lm(wx~x)` (the least squares line fit to the polygon value versus the weighted sum of its neighbors). 
+
+What effect does the rown normalization have on these results.
+
+```r
+# Style B (binary)
+moran.test(nc_SP$SID74,nc_nbq_wb)
+```
+
+```
+## 
+## 	Moran's I test under randomisation
+## 
+## data:  nc_SP$SID74  
+## weights: nc_nbq_wb  
+## 
+## Moran I statistic standard deviate = 2.1707, p-value = 0.01498
+## alternative hypothesis: greater
+## sample estimates:
+## Moran I statistic       Expectation          Variance 
+##       0.119089049      -0.010101010       0.003542176
+```
+
+This has a l arge effect - __3__ times more likely to be random. The normalized W creates greater influence of lesser connected counties. This always be investigated.
+ 
+Sometimes, it's better to try a monte carlo permutation approach...
+
+
+```r
+nc.moran.perms <- moran.mc(nc_SP$SID74,nc_nbq_wr,nsim=1000)
+
+# this creates an object that can be plotted
+plot(nc.moran.perms)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-57-1.png) 
+
+We can also use join counts in the case of areal data. Note that, in this case we have to break, or classify, the continuous data into factors.
+
+
+```r
+# easy example designed by classifying NC SIDS data as above median and below median
+# summary(nc_SP$SID74)
+# sids.rank <- cut(nc_SP$SID74, breaks=c(-1,4,45),labels=c('below-median','above-median'))
+# names(sids.rank) <- rownames(nc_SP$names)
+# nc.jc.factor <- joincount.mc(sids.rank, nc_nbq_wr,nsim=1000)
+# plot(nc.jc.factor)
+```
+
+## Use of caution in autocorrelation tests
+
+When using any of these autocorrelation tests you should always consider these items.
+
+1. Autocorrelation tests are highly sensitive to spatial patterning in the variable of interest from any source. But by assuming that the regression model removes such systematic spatial patterning, spatial autocorrelation tests do not always produce insights into the model.
+
+2. All of these tests are also highly sensitive to one's choice of spatial weights. Where the weights do not reflect the true structure of spatial interaction, estimated autocorrelation (or lack thereof) may actually stem from model misspecification.
+
+3. As originally designed, spatial autocorrelation tests assumed there are __no__ neighborless units in the study area. When this assumption is violated, the size of $n$ may be adjusted (reduced) to reflect the fact that some units are effectively being ignored. Not doing so will generally bias the absolute value for the autocorrelation statistic upward and the variance downward.
+
+# Modeling spatial effects
+
+## The Spatial AutoRegressive (SAR) model
+
+At the beginning of the course, we summarized the basic linear model, $$y_i = X_i\beta + \epsilon_i$$ where $\epsilon_i ~ N(0,\Sigma), i = 1,...,n$. If the observed values are independent or have known correlation, $\Sigma$, then the Best Linear Uniformly Unbiased Estimate (BLUUE) of $\beta$, $$\hat{\beta} = (X^T\Sigma^{-1}X)^{-1} (X^T\Sigma^{-1}y)$$ and is also the solution that minimizes the weighted sum of residuals squared (the Weighted Least Squares Solution (WLESS). The variance of the parameter vector is $$Var[\hat{\beta}] = \sigma^2(X^T\Sigma^{-1}X)^{-1}$$ where $\sigma^2$ is the unknown error variance, estimated as $\tilde{\epsilon}^T\Sigma^{-1}\tilde{\epsilon}/(n-k)$, with $\tilde{\epsilon} = y - X\hat{\beta}$. This functionality is implemented in base R using the function `lm` (for linear model).
+
+Let's look at an example using the Columbus Crime dataset. We are assuming that the `CRIME` observations are not correlated in any way. 
+
+
+```r
+columbus <- readOGR(dsn='.',layer = 'columbus')
+```
+
+```
+## OGR data source with driver: ESRI Shapefile 
+## Source: ".", layer: "columbus"
+## with 49 features and 20 fields
+## Feature type: wkbPolygon with 2 dimensions
+```
+
+```r
+col.ols <- lm(CRIME ~ INC + HOVAL, data=columbus)
+summary(col.ols)
+```
+
+```
+## 
+## Call:
+## lm(formula = CRIME ~ INC + HOVAL, data = columbus)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -34.418  -6.388  -1.580   9.052  28.649 
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(>|t|)    
+## (Intercept)  68.6190     4.7355  14.490  < 2e-16 ***
+## INC          -1.5973     0.3341  -4.780 1.83e-05 ***
+## HOVAL        -0.2739     0.1032  -2.654   0.0109 *  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 11.43 on 46 degrees of freedom
+## Multiple R-squared:  0.5524,	Adjusted R-squared:  0.5329 
+## F-statistic: 28.39 on 2 and 46 DF,  p-value: 9.341e-09
+```
+
+Here, we are attempting to explain `CRIME` as a linear function of `INC` and `HOVAL` (income and housing values). Furthermore, we are assuming that covariance of `CRIME` is $\Sigma = \sigma^{2}I_{n}$. That is, the independent variables are uncorrelated among themselves. Under these assumptions, the `lm` function provides a solution in which the intercept is significant as is income (as income declines, crime tends to rise). Housing values do not seem to affect crime level. The residuals, $\tilde{\epsilon}$, are stored in the object. 
+
+
+```r
+head(col.ols$residuals)
+```
+
+```
+##           0           1           2           3           4           5 
+##   0.3465419  -3.6947990  -5.2873940 -19.9855151   6.4475490  -9.0734793
+```
+
+```r
+stem(col.ols$residuals)
+```
+
+```
+## 
+##   The decimal point is 1 digit(s) to the right of the |
+## 
+##   -3 | 4
+##   -2 | 0
+##   -1 | 6543
+##   -0 | 9999886665544432222
+##    0 | 011134456779
+##    1 | 01112333456
+##    2 | 9
+```
+
+The stem plots shows a normal distribution of residuals. However, we know that residuals also have spatial locations (the census block groups in Columbus). Let's plot them that way. `sp` provides an easy function for doing this...
+
+
+```r
+# check that the residuals are in the same order as the original data.frame (they are)
+
+# add the residuals to the data frame in columbus
+columbus@data[,'residuals'] <- col.ols$residuals
+spplot(columbus, zcol='residuals')
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-61-1.png) 
+
+It is somewhat easy to notice here that the residuals seem to show some spatial clustering. We can, of course, test this using `moran.plot`. We need to define a `listw` object defining the neighborhoods. Let's assume `QUEEN` contiguity and use a row normalized weight list. Therefore, we are comparing the average of the neighborhood residuals to the units residuals.
+
+
+```r
+col.wq <- nb2listw(poly2nb(columbus, queen =TRUE), style='W')
+moran.plot(col.ols$residuals,listw = col.wq)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-62-1.png) 
+
+Clearly this is positive global autocorrelation and the global `moran.test` shows it.
+
+
+```r
+col.moran.mc <- moran.mc(col.ols$residuals, listw = col.wq, nsim = 100)
+plot(col.moran.mc)
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-63-1.png) 
+
+Finally, we can use the following function applied directly to the `lm` object. 
+
+
+```r
+lm.morantest(col.ols, col.wq, zero.policy=NULL, alternative = "greater", spChk=NULL, resfun=weighted.residuals)
+```
+
+```
+## 
+## 	Global Moran's I for regression residuals
+## 
+## data:  
+## model: lm(formula = CRIME ~ INC + HOVAL, data = columbus)
+## weights: col.wq
+## 
+## Moran I statistic standard deviate = 2.8393, p-value = 0.00226
+## alternative hypothesis: greater
+## sample estimates:
+## Observed Moran's I        Expectation           Variance 
+##        0.222109407       -0.033418335        0.008099305
+```
+
+So there seems to be some level (though not necessarily a significant amount - depends on your threshold) of autocorrelation remaining in the residuals. We have at least two choices:
+
+1. We could try to re-specify the model (with different dependent variables or transformation of dependent variables) and see if the autocorrelation was actually due to spatial autocorrelation of a dependent variable or variables. This would be true if you think the demographic values can completely predict crime rates.
+
+2. We could try a spatial autoregessive model (which we'll develop below) which assumes the the crime rates themselves are spatially autocorrelated. This is the path you would take after exhausting the limits of the model (choice 1) or if you make the assumption that some interaction across units (census blocks) is cause crime to be spatially autocorrelated. 
+
+The choices you make (and likely it will be an iteration of these choices) may depend on your knowledge of the domain. For example, your understanding of how crime propagates through a city will affect your choice.
+
+When you begin working on choice 2, your task is to build an appropriate covariance matrix that models spatial interactions of crime rates.
+
+Beginning with the model detailed above $$y_i = X_i\beta + \epsilon_i$$ and explore what happens when we assume that two neighbors $i$ and $j$ interact...
+
+$$y_{i} = \alpha_{j}y_{j} + X_{i}\beta + \epsilon_{i} \\
+y_{j} = \alpha_{i}y_{i} + X_{j}\beta + \epsilon_{j} \\
+\epsilon_{i} \sim N(0,\sigma^2), i = 1 \\
+\epsilon_{j} \sim N(0,\sigma^2), j = 2 $$
+
+essentially meaning that observed values at location $i$ depend on those at location $j$, and vice versa. We also assume here that the data generating process is "simultaneous". Time dependent models are harder.
+
+With $n$ observations, we generalize the interactions as
+
+$$y_{i} = \rho \sum^{n}_{j=1}W_{ij}y_{j} + X_{i}\beta + \epsilon_{i} \\
+\epsilon_{i} \sim N(0,\sigma^2), i = 1,...,n$$
+
+This equation is for each $i$ observation and it's interactions with all the other observations at different locations. For all the observations we can write this a matrix equation (as before)
+
+$$y = \rho Wy + X\beta + \epsilon \\
+\epsilon \sim N(0, \sigma^2I_{n}) $$
+
+where $W$ is the spatial weights matrix, $\rho$ is the _spatial autoregressive scalar parameter_ and $I_{n}$ is the $n x n$ identify matrix. The absence of subscripts imply a vector or matrix. 
+
+You will often see this written as $$(y - \rho W y) = X \beta + \epsilon$$. The new term introduced to the model $\rho W y$ is the spatial lag we have seen before.
+
+In order to get an idea of the effect of $\rho$ consider the following :
+
+* When $\rho = 0$, the variable is not spatially autocorrelated. Information about a measurement in one location gives us no additional information about the value in neighboring locations (this is spatial independence and the model reverts to ordinary least squares).
+* When $\rho > 0$, the variable is positively spatially spatially autocorrelated. Neighboring values tend to be simiar to each other (clustering).
+* When $\rho < 0$, the variable is negatively negatively spatially autocorrelated. Neighboring values tend to be different from each other (segregation).
+
+Consider the following simulation using the columbus `QUEEN` conitiguity and `style='W'` row normalized weights. We are bypassing the `linkw` object here in favor of the $W$ form.  
+
+
+```r
+# # create the nb object
+# col.nb <-poly2nb(columbus, queen =TRUE) 
+# 
+# # define n and create a vector randomly distributed independent variables
+# y <- rnorm(n,mean=0,sd=1)  # column vector
+# 
+# # create three different spatial lags by changing rho
+# lag.zero <- invIrM(col.nb, 0.01, style='W',method='solve') %*% y
+# lag.pos <- invIrM(col.nb, 0.9, style='W',method='solve') %*% y
+# lag.neg <- invIrM(col.nb, -0.9, style='W',method='solve') %*% y
+# 
+# # now check with a Moran spatial autocorrelation test
+# moran.test(lag.zero, col.wq,alternative='two.sided')
+# moran.test(lag.pos, col.wq,alternative='two.sided')
+# moran.test(lag.neg, col.wq,alternative='two.sided')
+```
+
+So it turns out that spatial interaction goes a bit beyond just a spatially structured covariance matrix. The $\beta$ parameters in our model reflect the short-run direct impact of $X_{i}$ on $y_{i}$. However, we must account for the indirect impact of $X_{i}$ on $y_{i}$, from the influence $y_{i}$ exerts on it's neighbors $y_{i}$ which in turn feeds back into $y_{i}$. We've created a highly non-linear model and weighted least squares no longer gives an unbiased estimate. The solution to the spatial autoregressive (SAR) models is very complex. Luckily, `R` handles the complexities for us. 
+
+
+```r
+# SAR model for Columbus crime data (using QUEEN contiguity and row-normalized weights)
+col.sar <- lmSLX(CRIME ~ INC + HOVAL, data=columbus, listw = col.wq)
+
+# compare to OLS
+summary(col.sar)
+```
+
+```
+## 
+## Call:
+## lm(formula = nfo, data = data, na.action = na.action)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -36.342  -7.662  -0.013   7.978  25.572 
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(>|t|)    
+## (Intercept)  74.5534     6.7156  11.101 2.42e-14 ***
+## INC          -1.0974     0.3738  -2.936  0.00528 ** 
+## HOVAL        -0.2944     0.1017  -2.896  0.00587 ** 
+## WX.INC       -1.3987     0.5601  -2.497  0.01633 *  
+## WX.HOVAL      0.2148     0.2079   1.033  0.30712    
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 10.91 on 44 degrees of freedom
+## Multiple R-squared:  0.6105,	Adjusted R-squared:  0.5751 
+## F-statistic: 17.24 on 4 and 44 DF,  p-value: 1.413e-08
+```
+
+```r
+summary(col.ols)
+```
+
+```
+## 
+## Call:
+## lm(formula = CRIME ~ INC + HOVAL, data = columbus)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -34.418  -6.388  -1.580   9.052  28.649 
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(>|t|)    
+## (Intercept)  68.6190     4.7355  14.490  < 2e-16 ***
+## INC          -1.5973     0.3341  -4.780 1.83e-05 ***
+## HOVAL        -0.2739     0.1032  -2.654   0.0109 *  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 11.43 on 46 degrees of freedom
+## Multiple R-squared:  0.5524,	Adjusted R-squared:  0.5329 
+## F-statistic: 28.39 on 2 and 46 DF,  p-value: 9.341e-09
+```
+
+
+## The Spatial Error Model (SEM)
+
+Suppose that $y$ is explained entirely by two variables $x$ and $z$, where $x,z \sim N(0, I_{n})$ and are indepdendent $y = x\beta + z\theta$.
+
+If $z$ is not observed the vector $z\theta$ is nested in teh error term $\epsilon$ and $y = x\beta + \epsilon$. $z$ is any variable that is unaccounted for in the model and is often called a _latent_ variable. Often, it is a variable that is hard to quantify.
+
+In addition the bias induced by latent variable (omitted variable), a motiviation for this Spatial Error Model or SEM, is spatial heterogneity. Suppose we have a panel data set with multiple observations in each unit and we want our model to incorporate individual effects, we can include an $n x 1$ vector $a$ of individual intercepts for each unit $y = a + X\beta$. We can treat $a$ as a vector of spatial random effects and assume that it follows a spatial autoregressive process $$a = \lambda W a + \epsilon \\ a = (I_{n} - \lambda W)^{-1}\epsilon$$ where $\epsilon \sim N(0, \sigma^2I_{n})$ is a vector of disturbances. Substituting this into the model we get 
+
+$$y = X\beta + a = X\beta + (I_{n} - \lambda W)^{-1}\epsilon$$
+
+
+
+## Continuation of the SIDS case-study
+
+### Probability Mapping
+We will focus on probability mapping for disease rates data. Typically, we have counts of the incidence of some disease by spatial unit, associated with counts of populations at risk. The task is then to try to establish whether any spatial units seem to be characterised by higher or lower counts of cases than might have been expected in general terms (Bailey and Gatrell, 1995).
+An early approach by Choynowski (1959), described by Cressie and Read (1985)
+and Bailey and Gatrell (1995), assumes, given that the true rate for the spatial units is small, that as the population at risk increases to infinity, the spatial unit case counts are Poisson with mean value equal to the population at risk times the rate for the study area as a whole. Choynowski’s approach folds the two tails of the measured probabilities together, so that small values, for a chosen $\alpha$, occur for spatial units with either unusually high or low rates. For this reason, the high and low counties are plotted separately
+
+
+```r
+ch <- choynowski(nc$SID74, nc$BIR74)
+nc$ch_pmap_low <- ifelse(ch$type, ch$pmap, NA)
+nc$ch_pmap_high <- ifelse(!ch$type, ch$pmap, NA)
+prbs <- c(0, 0.001, 0.01, 0.05, 0.1, 1)
+nc$high = cut(nc$ch_pmap_high, prbs)
+nc$low = cut(nc$ch_pmap_low, prbs)
+
+#Probability map of North Carolina counties, SIDS cases 1974–78, alpha = 0.05, reproducing Cressie and Read (1985)
+spplot(nc, c("low", "high"), col.regions = grey.colors(5))
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-67-1.png) 
+
+```r
+pmap <- probmap(nc$SID74, nc$BIR74)
+nc$pmap <- pmap$pmap
+brks <- c(0, 0.001, 0.01, 0.025, 0.05, 0.95, 0.975, 0.99,0.999, 1)
+library(RColorBrewer)
+spplot(nc, "pmap", at = brks, col.regions = rev(brewer.pal(9,"RdBu")))
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-67-2.png) 
+
+```r
+ hist(nc$pmap, main = "")
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-67-3.png) 
+
+One ad-hoc way to assess the impact of the possible failure of our assumption
+that the counts follow the Poisson distribution is to estimate the dispersion by fitting a generalized linear model of the observed counts including only the intercept(null model) and offset by the observed population at risk (suggested by Marilia Carvalho and associates):
+
+
+```r
+res <- glm(SID74 ~ offset(log(BIR74)), data = nc, family = "quasipoisson")
+nc$stdres <- rstandard(res)
+brks <- c(-4, -3, -2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2, 3, 4)
+spplot(nc, "stdres", at = brks, col.regions = rev(brewer.pal(11,"RdBu")))
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-68-1.png) 
+
+### Exploration of the SIDs Data (following Cressie and Read, 1985)
+
+One of the first steps taken by Cressie and Read (1985) is to try to bring out spatial
+trends by dividing North Carolina up into 4×4 rough rectangles. Just to see how this
+works, let us map these rough rectangles before proceeding further.
+
+
+```r
+nc$both <- factor(paste(nc$L_id, nc$M_id, sep = ":"))
+nboth <- length(table(unclass(nc$both)))
+spplot(nc, "both", col.regions = sample(rainbow(nboth)))
+```
+
+![](Areal_Data_Analysis_files/figure-html/unnamed-chunk-69-1.png) 
+
+Cressie constructs a transformed SIDS rates variable, 1974–78, for his analyses. We can replicate his stem-and-leaf figure on p. 396 in the book, taken from Cressie and Read (1989):
+
+
+```r
+nc$ft.SID74 <- sqrt(1000) * (sqrt(nc$SID74/nc$BIR74) + sqrt((nc$SID74 + 1)/nc$BIR74))
+stem(round(nc$ft.SID74, 1), scale = 2)
+```
+
+```
+## 
+##   The decimal point is at the |
+## 
+##   0 | 9
+##   1 | 111244
+##   1 | 567789999
+##   2 | 0011111222334444
+##   2 | 55555666677778999999999
+##   3 | 000111122333333344444444
+##   3 | 5568999
+##   4 | 013344
+##   4 | 555557
+##   5 | 2
+##   5 | 
+##   6 | 3
+```
+
+### Median polish smoothing
+
+Cressie (1991, pp. 46–48, 393–400) discusses in some detail how smoothing may be
+used to partition the variation in the data into smooth and rough. In order to try it out on the North Carolina SIDS data set, we will use a coarse gridding into four columns and four rows given by Cressie (1991, pp. 553–554), where four grid cells are empty; these are given by variables $L_{id}$ and $M_{id}$ in object `nc`. Next we aggregate the number of live births and the number of SIDS cases 1974–1978 for the grid cells:
+
+```r
+mBIR74 <- tapply(nc$BIR74, nc$both, sum)
+mSID74 <- tapply(nc$SID74, nc$both, sum)
+```
+
+Using the same Freeman-Tukey transformation as is used for the county data, we
+coerce the data into a correctly configured matrix, some of the cells of which are empty. The medpolish function is applied to the matrix, being told to remove empty cells; the function iterates over the rows and columns of the matrix using median to extract an overall effect, row and column effects, and residuals:
+
 
 

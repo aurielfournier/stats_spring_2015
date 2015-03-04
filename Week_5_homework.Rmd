@@ -1,0 +1,119 @@
+---
+output: html_document
+---
+### Week 5 Homework
+### Auriel M.V. Fournier
+
+```{r}
+library(spdep)
+library(rgdal)
+library(sp)
+data(columbus)
+
+dat <- columbus
+
+col <- readOGR(dsn='.', layer='columbus')
+
+col.lm <- lm(CRIME ~ INC + HOVAL, data=columbus)
+inc_hAIC <- AIC(col.lm)
+summary(col.lm)
+```
+
+
+I am choosing to look at Queen with binomial weights, Rook with row normalized weights and Rook with binomial weights. I choose two two schemes with binomial weights because I think there might be soem impact of the number of neighborhoods on the crime in a given neighborhood. I choose two with rook contigruity because neighborhoods that share sides may be more directly influenced then by those which share vertices. Though incorporating something related to roads might be more logical. 
+
+```{r}
+
+col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
+col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
+col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
+moran.plot(col.lm$residuals, listw=col.qb)
+moran.plot(col.lm$residuals, listw=col.rw)
+moran.plot(col.lm$residuals, listw=col.rb)
+
+col@data[,'residuals'] <- col.lm$residuals
+spplot(col, zcol='residuals')
+
+qb <- lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+rw <- lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+rb <- lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+```
+
+
+if we look at the relationship between INC and HOVAL we see that is positively related, as a result adding both to the lm() might be confounding. What if we just look at income level. 
+
+```{r}
+data(columbus)
+
+dat <- columbus
+
+col <- readOGR(dsn='.', layer='columbus')
+
+col.lm <- lm(CRIME ~ INC , data=columbus)
+incAIC <- AIC(col.lm)
+
+summary(col.lm)
+
+
+col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
+col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
+col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
+moran.plot(col.lm$residuals, listw=col.qb)
+moran.plot(col.lm$residuals, listw=col.rw)
+moran.plot(col.lm$residuals, listw=col.rb)
+
+col@data[,'residuals'] <- col.lm$residuals
+spplot(col, zcol='residuals')
+```
+
+These residuals are much more evenly distributed, except for those two areas which are still either very high or very low. 
+
+```{r}
+qb <- lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+rw <- lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+rb <- lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+```
+
+
+```{r}
+data(columbus)
+
+dat <- columbus
+
+col <- readOGR(dsn='.', layer='columbus')
+
+col.lm <- lm(CRIME ~ INC + HOVAL + PLUMB , data=columbus)
+inc_h_pAIC <- AIC(col.lm)
+summary(col.lm)
+
+
+col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
+col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
+col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
+moran.plot(col.lm$residuals, listw=col.qb)
+moran.plot(col.lm$residuals, listw=col.rw)
+moran.plot(col.lm$residuals, listw=col.rb)
+
+col@data[,'residuals'] <- col.lm$residuals
+spplot(col, zcol='residuals')
+```
+
+These residuals are much more evenly distributed, except for those two areas which are still either very high or very low. 
+
+```{r}
+qb <- lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+rw <- lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+rb <- lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+```
+
+
+
+```{r}
+
+incAIC
+
+inc_h_pAIC
+
+inc_hAIC
+```
+
