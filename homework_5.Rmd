@@ -1,0 +1,79 @@
+---
+output: html_document
+---
+### Week 5 Homework
+### Auriel M.V. Fournier
+
+```{r, warning=F, results='hide', message=F}
+library(spdep)
+library(rgdal)
+library(sp)
+data(columbus)
+dat <- columbus
+col <- readOGR(dsn='.', layer='columbus')
+```
+
+
+```{r}
+col.lm <- lm(CRIME ~ INC + HOVAL, data=columbus)
+i.h.aic <- AIC(col.lm)
+summary(col.lm)
+```
+
+
+I am choosing to look at Queen with binomial weights, Rook with row normalized weights and Rook with binomial weights. I choose two two schemes with binomial weights because I think there might be some impact of the number of neighborhoods on the crime in a given neighborhood. I choose two with rook contigruity because neighborhoods that share sides may be more directly influenced then by those which share vertices. Though incorporating something related to roads might be more logical. 
+
+```{r}
+
+col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
+col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
+col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
+lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+
+moran.plot(col.lm$residuals, listw=col.qb)
+```
+
+This first moran's plot is looking at Queen contigruity with Binomial Neighbors. The points in the upper left and lower right quadrants are close to the mean, while the points in the upper right and lower left quadrants are farther away from the mean, and have four of the five outliers. This suggests that there is clustering, since the points which are away from the mean are also more like their neighbors (high residuals are near other high residuals).
+
+```{r}
+moran.plot(col.lm$residuals, listw=col.rw)
+```
+
+This second moran's plot is looking at Rook Contigruity with Row-Normalized Neighbors. It has a similar plot to the first plot, but there are less outliers and the outliers are in the upper left and lower right quadrants, which suggests that two of these three outliers are very far from the mean and are not like their neighbors. 
+
+```{r}
+moran.plot(col.lm$residuals, listw=col.rb)
+```
+
+This third moran's plot is looking at Rook Contigruity with Binomial Neighbors. It is very similar to the first plot, with the same outliers, though in slightly different places. The pattern here is also similar to the first plot which suggests more clustering of like neighbors. 
+
+
+```{r}
+col@data[,'residuals'] <- col.lm$residuals
+spplot(col, zcol='residuals')
+```
+
+
+```{r}
+
+G.qb <- localG(col$CRIME, col.qb, zero.policy=NULL, spChk=NULL)
+G.rw <- localG(col$CRIME, col.rw, zero.policy=NULL, spChk=NULL)
+G.rb <- localG(col$CRIME, col.rb, zero.policy=NULL, spChk=NULL)
+
+G.qb
+G.rw
+G.rb
+
+```
+
+The hotspot scores for both of the rook contigruity measures are the same `r sum(G.rw)`. The queen contigruity is higher `r sum(G.qb)` (by about 100%) implying that under queen contigruity they are more clustered. This makes more sense since there is more information being pulled in, so they should be more clustered under a queen scenario. 
+
+Regardless of the contigruity the clustering is positive suggesting that crime is not randomly distributed across the city, polygons are more likely to have crime rates like their neighbors. 
+
+### Further Directions
+
+These two areas which are still very far from the mean (very high and very low residuals) which means that there may be a latent variable impacting the crime rate in an unexpected way. I'm not sure where Ohio State is within these polygons but the campus might have an impact on security, or its neighbors, since student housing can have higher crime rates. A variable for percent of the population who are college students might be informative. 
+
+The very dark polygon on the NW side of the city has 0 open space, which makes me think it might be some kind of industrial area. This might explain the very low crime rate since these buildings might be less likely to attract the kind of crime that occurs in residential areas. Being able to quantify the types of landcover in these polygons besides open space might be helpful for explaining the crime rates. 

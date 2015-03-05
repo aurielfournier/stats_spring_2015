@@ -4,18 +4,19 @@ output: html_document
 ### Week 5 Homework
 ### Auriel M.V. Fournier
 
-```{r}
+```{r, warning=F, results='hide', message=F}
 library(spdep)
 library(rgdal)
 library(sp)
 data(columbus)
-
 dat <- columbus
-
 col <- readOGR(dsn='.', layer='columbus')
+```
 
+
+```{r}
 col.lm <- lm(CRIME ~ INC + HOVAL, data=columbus)
-inc_hAIC <- AIC(col.lm)
+i.h.aic <- AIC(col.lm)
 summary(col.lm)
 ```
 
@@ -27,40 +28,32 @@ I am choosing to look at Queen with binomial weights, Rook with row normalized w
 col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
 col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
 col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
-moran.plot(col.lm$residuals, listw=col.qb)
-moran.plot(col.lm$residuals, listw=col.rw)
-moran.plot(col.lm$residuals, listw=col.rb)
+lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
 
 col@data[,'residuals'] <- col.lm$residuals
 spplot(col, zcol='residuals')
 
-qb <- lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-rw <- lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-rb <- lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+
 ```
 
 
 if we look at the relationship between INC and HOVAL we see that is positively related, as a result adding both to the lm() might be confounding. What if we just look at income level. 
 
-```{r}
-data(columbus)
-
-dat <- columbus
-
-col <- readOGR(dsn='.', layer='columbus')
-
+```{r, warning=F}
 col.lm <- lm(CRIME ~ INC , data=columbus)
-incAIC <- AIC(col.lm)
-
+i.aic <- AIC(col.lm)
 summary(col.lm)
 
 
 col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
 col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
 col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
-moran.plot(col.lm$residuals, listw=col.qb)
-moran.plot(col.lm$residuals, listw=col.rw)
-moran.plot(col.lm$residuals, listw=col.rb)
+
+lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
 
 col@data[,'residuals'] <- col.lm$residuals
 spplot(col, zcol='residuals')
@@ -68,52 +61,38 @@ spplot(col, zcol='residuals')
 
 These residuals are much more evenly distributed, except for those two areas which are still either very high or very low. 
 
-```{r}
-qb <- lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-rw <- lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-rb <- lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-```
+perhaps through adding in another variable, like PLUMB we can better explain these patterns (the very high crime area had one of the highest rates of no plumbing)
 
 
 ```{r}
-data(columbus)
-
-dat <- columbus
-
-col <- readOGR(dsn='.', layer='columbus')
-
-col.lm <- lm(CRIME ~ INC + HOVAL + PLUMB , data=columbus)
-inc_h_pAIC <- AIC(col.lm)
+col.lm <- lm(CRIME ~ INC + PLUMB , data=columbus)
+i.p.aic <- AIC(col.lm)
 summary(col.lm)
-
 
 col.qb <- nb2listw(poly2nb(col, queen=T),style="B")
 col.rw <- nb2listw(poly2nb(col, queen=F),style="W")
 col.rb <- nb2listw(poly2nb(col, queen=F),style="B")
-moran.plot(col.lm$residuals, listw=col.qb)
-moran.plot(col.lm$residuals, listw=col.rw)
-moran.plot(col.lm$residuals, listw=col.rb)
+
+lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+
 
 col@data[,'residuals'] <- col.lm$residuals
 spplot(col, zcol='residuals')
 ```
 
-These residuals are much more evenly distributed, except for those two areas which are still either very high or very low. 
+These residuals are even more variable, so adding in plumbing didn't do anything. Of the available variables the one which explains things the best is just straight income, it has the least variation in residuals (atleast from a visual perspective).
+
+The AIC of the income.homevalue and income.plumbing are very close, typically models within 2 DeltaAIC of the top model are all considered to be plausible models though in some situations models with as much as 10 DeltaAIC can be considered. Under the 10 DeltaAIC scenario all three models are possible models, in which case the simplest model is often selected, or model averaging would be used. 
 
 ```{r}
-qb <- lm.morantest(col.lm, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-rw <- lm.morantest(col.lm, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-rb <- lm.morantest(col.lm, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+i.p.aic
+i.h.aic
+i.aic
 ```
 
+These two areas which are still very far from the mean (very high and very low residuals) which means that there may be a latent variable impacting the crime rate in an unexpected way. I'm not sure where Ohio State is within these polygons but the campus might have an impact on security, or its neighbors, since student housing can have higher crime rates. A variable for percent of the population who are college students might be informative. 
 
-
-```{r}
-
-incAIC
-
-inc_h_pAIC
-
-inc_hAIC
-```
+The very dark polygon on the NW side of the city has 0 open space, which makes me think it might be some kind of industrial area. This might explain the very low crime rate since these buildings might be less likely to attract the kind of crime that occurs in residential areas. Being able to quantify the types of landcover in these polygons besides open space might be helpful for explaining the crime rates. 
 
