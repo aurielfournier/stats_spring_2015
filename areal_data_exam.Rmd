@@ -6,16 +6,18 @@ output: html_document
 ---
 
 ```{r}
-
+library(ggplot2)
 library(maptools)
 library(spdep)
+library(xtable)
+
 nc.sids <- readShapePoly(system.file("etc/shapes/sids.shp", package="spdep")[1], ID="FIPSNO", proj4string=CRS("+proj=longlat +ellps=clrk66"))
 rn <- sapply(slot(nc.sids, "polygons"), function(x) slot(x, "ID"))
 ncCC89_nb <- read.gal(system.file("etc/weights/ncCC89.gal", package="spdep")[1], region.id=rn)
-ncCR85_nb <- read.gal(system.file("etc/weights/ncCR85.gal", package="spdep")[1], region.id=rn)
+ncCC85_nb <- read.gal(system.file("etc/weights/ncCR85.gal", package="spdep")[1], region.id=rn)
 ## Not run: 
 plot(nc.sids, border="grey")
-plot(ncCR85_nb, coordinates(nc.sids), add=TRUE, col="blue")
+plot(ncCC85_nb, coordinates(nc.sids), add=TRUE, col="blue")
 
 plot(nc.sids, border="grey")
 plot(ncCC89_nb, coordinates(nc.sids), add=TRUE, col="blue")
@@ -28,6 +30,137 @@ nwbirth.ft.all.79 = sqrt(1000)*(sqrt(nc.sids$NWBIR79/nc.sids$BIR79)+sqrt((nc.sid
 sids.ft.all.74 = sqrt(1000)*(sqrt(nc.sids$SID74/nc.sids$BIR74) +sqrt((nc.sids$SID74+1)/nc.sids$BIR74))
 
 nwbirth.ft.all.74 = sqrt(1000)*(sqrt(nc.sids$NWBIR74/nc.sids$BIR74)+sqrt((nc.sids$NWBIR74+1)/nc.sids$BIR74))
+```
 
+First I'd like to examine any relationship between these two variables without taking into account spatial variation. I'll do this by running a linear model of non-white births vs sids. 
+
+```{r}
+
+dat74 <- as.data.frame(cbind(nwbirth.ft.all.74, sids.ft.all.74))
+colnames(dat74) <- c("nwb","sids")
+
+l74 <- lm(nwb ~ sids, data=dat74)
+summary(l74)
+
+ggplot(data=dat74,aes(nwb, sids))+geom_point()+geom_smooth(method=lm)
+
+
+dat79 <- as.data.frame(cbind(nwbirth.ft.all.79, sids.ft.all.79))
+colnames(dat79) <- c("nwb","sids")
+
+l79 <- lm(nwb ~ sids, data=dat79)
+summary(l79)
+
+ggplot(data=dat79,aes(nwb, sids))+geom_point()+geom_smooth(method=lm)
 
 ```
+
+So in 1974 there is a significant relationship between the two, but not in 1979. In both cases the R is low (1974 it is .3431) suggesting that even when it is significant there might be other factors at play. 
+
+So lets start to examine things spatially. 
+
+
+```{r}
+col.qb <- nb2listw(poly2nb(nc.sids, queen=T),style="B")
+col.rw <- nb2listw(poly2nb(nc.sids, queen=F),style="W")
+col.rb <- nb2listw(poly2nb(nc.sids, queen=F),style="B")
+coords <- coordinates(nc.sids)
+nc.d2 <- nb2listw(dnearneigh(coords, d1=0, d=2))
+nc.d1 <- nb2listw(dnearneigh(coords, d1=0, d=1))
+knn3 <- nb2listw(knn2nb(knearneigh(coords, k=3)))
+knn6 <- nb2listw(knn2nb(knearneigh(coords, k=6)))
+knn9 <- nb2listw(knn2nb(knearneigh(coords, k=9)))
+lm.morantest(l74, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, nc.d2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, nc.d1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, knn3, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, knn6, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+lm.morantest(l74, knn9, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
+
+
+ moran.plot(l74$residuals, listw=col.qb)
+ moran.plot(l74$residuals, listw=col.rw)
+ moran.plot(l74$residuals, listw=col.rb)
+ moran.plot(l74$residuals, listw=nc.d2)
+ moran.plot(l74$residuals, listw=nc.d1)
+ moran.plot(l74$residuals, listw=knn3)
+ moran.plot(l74$residuals, listw=knn6)
+ moran.plot(l74$residuals, listw=knn9)
+
+
+
+col.qb <- nb2listw(poly2nb(nc.sids, queen=T),style="B")
+col.rw <- nb2listw(poly2nb(nc.sids, queen=F),style="W")
+col.rb <- nb2listw(poly2nb(nc.sids, queen=F),style="B")
+coords <- coordinates(nc.sids)
+nc.d2 <- nb2listw(dnearneigh(coords, d1=0, d=2))
+nc.d1 <- nb2listw(dnearneigh(coords, d1=0, d=1))
+knn1 <- nb2listw(knn2nb(knearneigh(coords, k=1)))
+knn2 <- nb2listw(knn2nb(knearneigh(coords, k=2)))
+knn3 <- nb2listw(knn2nb(knearneigh(coords, k=3)))
+knn4 <- nb2listw(knn2nb(knearneigh(coords, k=4)))
+knn5 <- nb2listw(knn2nb(knearneigh(coords, k=5)))
+knn6 <- nb2listw(knn2nb(knearneigh(coords, k=6)))
+knn7 <- nb2listw(knn2nb(knearneigh(coords, k=7)))
+knn8 <- nb2listw(knn2nb(knearneigh(coords, k=8)))
+knn9 <- nb2listw(knn2nb(knearneigh(coords, k=9)))
+knn10 <- nb2listw(knn2nb(knearneigh(coords, k=10)))
+moranIs <- as.data.frame(matrix(ncol=3,nrow=8))
+moranIs[1,] <- lm.morantest(l79, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[2,] <-lm.morantest(l79, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[3,] <-lm.morantest(l79, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[4,] <-lm.morantest(l79, nc.d2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[5,] <-lm.morantest(l79, nc.d1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[6,] <-lm.morantest(l79, knn3, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[7,] <-lm.morantest(l79, knn6, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[8,] <-lm.morantest(l79, knn9, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+
+names <- c("col.qb","col.rw","col.rb","nc.d2","nd.d1","knn3","knn6","knn9")
+moranIs$names <- names
+
+moranIs <- moranIs[,c("names","V1","V2","V3")]
+moranI <- moranIs[order(moranIs$V1),]
+colnames(moranI) <- c("Observed Moran's I","Expectation","Variance","Weighting Scheme")
+
+moranI
+
+moran.plot(l79$residuals, listw=col.qb)
+ moran.plot(l79$residuals, listw=col.rw)
+ moran.plot(l79$residuals, listw=col.rb)
+ moran.plot(l79$residuals, listw=nc.d2)
+ moran.plot(l79$residuals, listw=nc.d1)
+ moran.plot(l79$residuals, listw=knn3)
+ moran.plot(l79$residuals, listw=knn6)
+ moran.plot(l79$residuals, listw=knn9)
+
+
+mor1 <- as.data.frame(localmoran(x=l79$residuals, listw=knn1))
+mor1$knn <- 1
+mor2 <- as.data.frame(localmoran(x=l79$residuals, listw=knn2))
+mor2$knn <- 2
+mor3 <- as.data.frame(localmoran(x=l79$residuals, listw=knn3))
+mor3$knn <- 3
+mor4 <- as.data.frame(localmoran(x=l79$residuals, listw=knn4))
+mor4$knn <- 4
+mor5 <- as.data.frame(localmoran(x=l79$residuals, listw=knn5))
+mor5$knn <- 5
+mor6 <- as.data.frame(localmoran(x=l79$residuals, listw=knn6))
+mor6$knn <- 6
+mor7 <- as.data.frame(localmoran(x=l79$residuals, listw=knn7))
+mor7$knn <- 7
+mor8 <- as.data.frame(localmoran(x=l79$residuals, listw=knn8))
+mor8$knn <- 8
+mor9 <- as.data.frame(localmoran(x=l79$residuals, listw=knn9))
+mor9$knn <- 9
+mor10 <- as.data.frame(localmoran(x=l79$residuals, listw=knn10))
+mor10$knn <- 10
+
+mor <- rbind(mor1, mor2, mor3, mor4, mor5,mor6,mor7,mor8,mor9,mor10)
+mor$knn <- as.factor(mor$knn)
+ggplot(data=mor)+geom_boxplot(aes(knn,Ii, fill=knn, group=knn))
+```
+
+what about distance from the ocean? elevation? 
+
