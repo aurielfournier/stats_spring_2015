@@ -3,94 +3,72 @@ title: "Quan_Tech_Areal_Data_Exam"
 author: "Auriel Fournier"
 date: "Monday, March 16, 2015"
 output: html_document
+bibliography: aereal_exam.bib
 ---
 
-```{r}
+Much of the code has been hidden from the html output for readability. 
+
+```{r, results='hide', warning=FALSE, error=FALSE, message=F}
 library(ggplot2)
 library(maptools)
 library(spdep)
 library(xtable)
+library(sp)
+```
 
+```{r, echo=F}
 nc.sids <- readShapePoly(system.file("etc/shapes/sids.shp", package="spdep")[1], ID="FIPSNO", proj4string=CRS("+proj=longlat +ellps=clrk66"))
 rn <- sapply(slot(nc.sids, "polygons"), function(x) slot(x, "ID"))
 ncCC89_nb <- read.gal(system.file("etc/weights/ncCC89.gal", package="spdep")[1], region.id=rn)
 ncCC85_nb <- read.gal(system.file("etc/weights/ncCR85.gal", package="spdep")[1], region.id=rn)
-## Not run: 
-plot(nc.sids, border="grey")
-plot(ncCC85_nb, coordinates(nc.sids), add=TRUE, col="blue")
 
-plot(nc.sids, border="grey")
-plot(ncCC89_nb, coordinates(nc.sids), add=TRUE, col="blue")
+nc.sids$sid74ft = sqrt(1000)*(sqrt(nc.sids$SID79/nc.sids$BIR79) +sqrt((nc.sids$SID79+1)/nc.sids$BIR79))
 
+nc.sids$nwbir74ft = sqrt(1000)*(sqrt(nc.sids$NWBIR79/nc.sids$BIR79)+sqrt((nc.sids$NWBIR79+1)/nc.sids$BIR79))
 
-sids.ft.all.79 = sqrt(1000)*(sqrt(nc.sids$SID79/nc.sids$BIR79) +sqrt((nc.sids$SID79+1)/nc.sids$BIR79))
+nc.sids$sid79ft = sqrt(1000)*(sqrt(nc.sids$SID74/nc.sids$BIR74) +sqrt((nc.sids$SID74+1)/nc.sids$BIR74))
 
-nwbirth.ft.all.79 = sqrt(1000)*(sqrt(nc.sids$NWBIR79/nc.sids$BIR79)+sqrt((nc.sids$NWBIR79+1)/nc.sids$BIR79))
-
-sids.ft.all.74 = sqrt(1000)*(sqrt(nc.sids$SID74/nc.sids$BIR74) +sqrt((nc.sids$SID74+1)/nc.sids$BIR74))
-
-nwbirth.ft.all.74 = sqrt(1000)*(sqrt(nc.sids$NWBIR74/nc.sids$BIR74)+sqrt((nc.sids$NWBIR74+1)/nc.sids$BIR74))
+nc.sids$nwbir79ft = sqrt(1000)*(sqrt(nc.sids$NWBIR74/nc.sids$BIR74)+sqrt((nc.sids$NWBIR74+1)/nc.sids$BIR74))
 ```
+
+```{r, echo=F}
+spplot(nc.sids, zcol='nwbir74ft', main="non-white birth 1974")
+spplot(nc.sids, zcol="nwbir79ft", main="non-white birth 1979")
+spplot(nc.sids, zcol="sid74ft", main="sids 1974")
+spplot(nc.sids, zcol="sid79ft", main="sids 1979")
+```
+
+While the non white birth rate does not appear to change much between the two years the sids rate declines over all from 1974-1979 though the hot spots are still in the same parts of the state, though not always the same counties. 
+
 
 First I'd like to examine any relationship between these two variables without taking into account spatial variation. I'll do this by running a linear model of non-white births vs sids. 
 
-```{r}
-
-dat74 <- as.data.frame(cbind(nwbirth.ft.all.74, sids.ft.all.74))
-colnames(dat74) <- c("nwb","sids")
-
-l74 <- lm(nwb ~ sids, data=dat74)
+```{r, echo=F}
+l74 <- lm(nwbir74ft ~ sid74ft, data=nc.sids)
 summary(l74)
+```
 
-ggplot(data=dat74,aes(nwb, sids))+geom_point()+geom_smooth(method=lm)
+```{r, echo=FALSE}
+ncsid <- as.data.frame(nc.sids)
+ggplot(data=ncsid,aes(nwbir74ft, sid74ft))+geom_point()+geom_smooth(method=lm)
+```
 
-
-dat79 <- as.data.frame(cbind(nwbirth.ft.all.79, sids.ft.all.79))
-colnames(dat79) <- c("nwb","sids")
-
-l79 <- lm(nwb ~ sids, data=dat79)
+```{r, echo=F}
+l79 <- lm(nwbir79ft ~ sid79ft, data=nc.sids)
 summary(l79)
+```
 
-ggplot(data=dat79,aes(nwb, sids))+geom_point()+geom_smooth(method=lm)
+```{r, echo=FALSE}
+ggplot(data=ncsid,aes(nwbir79ft, sid79ft))+geom_point()+geom_smooth(method=lm)
 
 ```
 
-So in 1974 there is a significant relationship between the two, but not in 1979. In both cases the R is low (1974 it is .3431) suggesting that even when it is significant there might be other factors at play. 
+So in 1979 there is a significant relationship between the two, but not in 1974. In both cases the R is low (1979 it is .3431) suggesting that even when it is significant there might be other factors at play. 
 
 So lets start to examine things spatially. 
 
 
 ```{r}
-col.qb <- nb2listw(poly2nb(nc.sids, queen=T),style="B")
-col.rw <- nb2listw(poly2nb(nc.sids, queen=F),style="W")
-col.rb <- nb2listw(poly2nb(nc.sids, queen=F),style="B")
-coords <- coordinates(nc.sids)
-nc.d2 <- nb2listw(dnearneigh(coords, d1=0, d=2))
-nc.d1 <- nb2listw(dnearneigh(coords, d1=0, d=1))
-knn3 <- nb2listw(knn2nb(knearneigh(coords, k=3)))
-knn6 <- nb2listw(knn2nb(knearneigh(coords, k=6)))
-knn9 <- nb2listw(knn2nb(knearneigh(coords, k=9)))
-lm.morantest(l74, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, nc.d2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, nc.d1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, knn3, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, knn6, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-lm.morantest(l74, knn9, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)
-
-
- moran.plot(l74$residuals, listw=col.qb)
- moran.plot(l74$residuals, listw=col.rw)
- moran.plot(l74$residuals, listw=col.rb)
- moran.plot(l74$residuals, listw=nc.d2)
- moran.plot(l74$residuals, listw=nc.d1)
- moran.plot(l74$residuals, listw=knn3)
- moran.plot(l74$residuals, listw=knn6)
- moran.plot(l74$residuals, listw=knn9)
-
-
-
 col.qb <- nb2listw(poly2nb(nc.sids, queen=T),style="B")
 col.rw <- nb2listw(poly2nb(nc.sids, queen=F),style="W")
 col.rb <- nb2listw(poly2nb(nc.sids, queen=F),style="B")
@@ -107,34 +85,86 @@ knn7 <- nb2listw(knn2nb(knearneigh(coords, k=7)))
 knn8 <- nb2listw(knn2nb(knearneigh(coords, k=8)))
 knn9 <- nb2listw(knn2nb(knearneigh(coords, k=9)))
 knn10 <- nb2listw(knn2nb(knearneigh(coords, k=10)))
-moranIs <- as.data.frame(matrix(ncol=3,nrow=8))
+knn20 <- nb2listw(knn2nb(knearneigh(coords, k=20)))
+knn30 <- nb2listw(knn2nb(knearneigh(coords, k=30)))
+```
+
+### 1974
+
+```{r, echo=FALSE}
+moranIs <- as.data.frame(matrix(ncol=3,nrow=17))
+moranIs[1,] <- lm.morantest(l74, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[2,] <-lm.morantest(l74, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[3,] <-lm.morantest(l74, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[4,] <-lm.morantest(l74, nc.d2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[5,] <-lm.morantest(l74, nc.d1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[6,] <-lm.morantest(l74, knn1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[7,] <-lm.morantest(l74, knn2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[8,] <-lm.morantest(l74, knn3, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[9,] <-lm.morantest(l74, knn4, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[10,] <-lm.morantest(l74, knn5, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[11,] <-lm.morantest(l74, knn6, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[12,] <-lm.morantest(l74, knn7, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[13,] <-lm.morantest(l74, knn8, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[14,] <-lm.morantest(l74, knn9, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[15,] <-lm.morantest(l74, knn10, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[16,] <-lm.morantest(l74, knn20, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[17,] <-lm.morantest(l74, knn30, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+
+names <- c("col.qb","col.rw","col.rb","nc.d2","nd.d1","knn1","knn2","knn3","knn4","knn5","knn6","knn7","knn8","knn9","knn10","knn20","knn30")
+moranIs$names <- names
+
+moranIs <- moranIs[,c("names","V1","V2","V3")]
+moranI <- moranIs[order(moranIs$V1),]
+colnames(moranI) <- c("Names","Observed Moran's I","Expectation","Variance")
+
+moranI
+
+```
+
+The 1974 Moran's Is are from .42 to .55, which is pretty uninformative since they are all so similar. They are all positive, which means some clumping. The rook contigruity row normalized model and 2 nearest neighbors are the most clustered. 
+
+### 1979
+
+```{r, echo=FALSE}
+moranIs <- as.data.frame(matrix(ncol=3,nrow=15))
 moranIs[1,] <- lm.morantest(l79, col.qb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
 moranIs[2,] <-lm.morantest(l79, col.rw, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
 moranIs[3,] <-lm.morantest(l79, col.rb, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
 moranIs[4,] <-lm.morantest(l79, nc.d2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
 moranIs[5,] <-lm.morantest(l79, nc.d1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
-moranIs[6,] <-lm.morantest(l79, knn3, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
-moranIs[7,] <-lm.morantest(l79, knn6, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
-moranIs[8,] <-lm.morantest(l79, knn9, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[6,] <-lm.morantest(l79, knn1, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[7,] <-lm.morantest(l79, knn2, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[8,] <-lm.morantest(l79, knn3, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[9,] <-lm.morantest(l79, knn4, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[10,] <-lm.morantest(l79, knn5, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[11,] <-lm.morantest(l79, knn6, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[12,] <-lm.morantest(l79, knn7, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[13,] <-lm.morantest(l79, knn8, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[14,] <-lm.morantest(l79, knn9, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[15,] <-lm.morantest(l79, knn10, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[16,] <-lm.morantest(l79, knn20, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
+moranIs[17,] <-lm.morantest(l79, knn30, zero.policy=NULL, alternative="greater", spChk=NULL, resfun=weighted.residuals)$estimate
 
-names <- c("col.qb","col.rw","col.rb","nc.d2","nd.d1","knn3","knn6","knn9")
+names <- c("col.qb","col.rw","col.rb","nc.d2","nd.d1","knn1","knn2","knn3","knn4","knn5","knn6","knn7","knn8","knn9","knn10","knn20","knn30")
 moranIs$names <- names
-
 moranIs <- moranIs[,c("names","V1","V2","V3")]
 moranI <- moranIs[order(moranIs$V1),]
-colnames(moranI) <- c("Observed Moran's I","Expectation","Variance","Weighting Scheme")
+colnames(moranI) <- c("Names","Observed Moran's I","Expectation","Variance")
 
 moranI
 
-moran.plot(l79$residuals, listw=col.qb)
- moran.plot(l79$residuals, listw=col.rw)
- moran.plot(l79$residuals, listw=col.rb)
- moran.plot(l79$residuals, listw=nc.d2)
- moran.plot(l79$residuals, listw=nc.d1)
- moran.plot(l79$residuals, listw=knn3)
- moran.plot(l79$residuals, listw=knn6)
- moran.plot(l79$residuals, listw=knn9)
+```
 
+The 1979 Moran's Is are from .52 to .77, which is more informative then the 1974 data since they are all closer to 1. They are all positive, which means some clumping. The same top models (those with the highest Moran's I) are here as there were for the 1974 dataset. 
+
+This suggests that the clustering is happening at the small scale in both situations. 
+
+I made the following two graphs after reading section 7.5 in O'Sullivan and Unwin [-@OSullivan2010] and seeing Figure 7.10 which showed a graphical way of seeing how many neighbors are an appropriate scale. I thought this might help in my own analysis but as you can see instead of drop off after 3 neighbors as is seen in O'Sullivan and Unwin [-@OSullivan2010] it is straight line, with a fairly high spread of values and several outliers. So this was not informative for the number of neighbors to cut it off at. The fact that the values are roughly the same at each number of neighbors suggests that there may not be clumping, unless the clumping is larger then 10. Originally I picked 1-10 numbers and there was no difference, so then I added 20 and 30 to see if the trend continued, and as you can see, it does. though data is tighter. I feel that cutting off the number of neighbors at 30 is appropriate since that is ~30% of the data. 
+
+### 1979
+
+```{r, echo=F}
 
 mor1 <- as.data.frame(localmoran(x=l79$residuals, listw=knn1))
 mor1$knn <- 1
@@ -156,11 +186,94 @@ mor9 <- as.data.frame(localmoran(x=l79$residuals, listw=knn9))
 mor9$knn <- 9
 mor10 <- as.data.frame(localmoran(x=l79$residuals, listw=knn10))
 mor10$knn <- 10
+mor20 <- as.data.frame(localmoran(x=l79$residuals, listw=knn20))
+mor20$knn <- 20
+mor30 <- as.data.frame(localmoran(x=l79$residuals, listw=knn30))
+mor30$knn <- 30
 
-mor <- rbind(mor1, mor2, mor3, mor4, mor5,mor6,mor7,mor8,mor9,mor10)
+mor <- rbind(mor1, mor2, mor3, mor4, mor5,mor6,mor7,mor8,mor9,mor10,mor20,mor30)
+mor$knn <- as.factor(mor$knn)
+ggplot(data=mor)+geom_boxplot(aes(knn,Ii, fill=knn, group=knn))
+
+```
+
+### 1974
+
+```{r, echo=FALSE}
+
+mor1 <- as.data.frame(localmoran(x=l74$residuals, listw=knn1))
+mor1$knn <- 1
+mor2 <- as.data.frame(localmoran(x=l74$residuals, listw=knn2))
+mor2$knn <- 2
+mor3 <- as.data.frame(localmoran(x=l74$residuals, listw=knn3))
+mor3$knn <- 3
+mor4 <- as.data.frame(localmoran(x=l74$residuals, listw=knn4))
+mor4$knn <- 4
+mor5 <- as.data.frame(localmoran(x=l74$residuals, listw=knn5))
+mor5$knn <- 5
+mor6 <- as.data.frame(localmoran(x=l74$residuals, listw=knn6))
+mor6$knn <- 6
+mor7 <- as.data.frame(localmoran(x=l74$residuals, listw=knn7))
+mor7$knn <- 7
+mor8 <- as.data.frame(localmoran(x=l74$residuals, listw=knn8))
+mor8$knn <- 8
+mor9 <- as.data.frame(localmoran(x=l74$residuals, listw=knn9))
+mor9$knn <- 9
+mor10 <- as.data.frame(localmoran(x=l74$residuals, listw=knn10))
+mor10$knn <- 10
+mor20 <- as.data.frame(localmoran(x=l74$residuals, listw=knn20))
+mor20$knn <- 20
+mor30 <- as.data.frame(localmoran(x=l74$residuals, listw=knn30))
+mor30$knn <- 30
+
+mor <- rbind(mor1, mor2, mor3, mor4, mor5,mor6,mor7,mor8,mor9,mor10,mor20,mor30)
 mor$knn <- as.factor(mor$knn)
 ggplot(data=mor)+geom_boxplot(aes(knn,Ii, fill=knn, group=knn))
 ```
 
-what about distance from the ocean? elevation? 
+```{r, echo=F}
 
+lm74 <- lm(nwbir74ft ~ sid74ft, data=nc.sids)
+lm79 <- lm(nwbir79ft ~ sid79ft, data=nc.sids)
+```
+
+The first problem, as we saw before is that for 1974 non-white birth is not significant at explaining sids, and for 1979 it is significant, but the R^2 is so low that it isn't explaining most of the variation in the data. breaking the state up into a large grid of counties doesn't make sense to me conceptually, since those boundaries are totally arbitrary, it seems like we would be better off examining more kinds of neighbor relationships between counties instead of plopping them into boxes. 
+
+### KNN1 1974
+
+```{r, echo=FALSE}
+moran.plot(lm74$residuals, knn1, zero.policy=NULL)
+```
+
+### rook row normalized 1974
+
+```{r, echo=FALSE}
+moran.plot(lm74$residuals, col.rw, zero.policy=NULL)
+```
+
+Looking at both the Moran's plots for 1974 shows that counties tend to have sids rates like the counties around them, either clustering above or below the mean. There are a few outliers in both cases, in the rook row normalized there are two in the lower right hand corner which means they were unusually high compared to their neighbors. Looking at non-white births is one layer of this puzzle but looking at income or some metric of educational level might also be informative to take more of the noise out of these graphs. 
+
+### KNN1 1979
+
+```{r, echo=FALSE}
+moran.plot(lm79$residuals, knn1, zero.policy=NULL)
+```
+
+### rook row normalized 1979
+
+```{r, echo=FALSE}
+moran.plot(lm79$residuals, col.rw, zero.policy=NULL)
+```
+
+The 1979 Moran's plots are more diffuse, with more points occurring in the upper left and lower right boxes, suggesting that there is more heterogeneity on the landscape, since areas in these quadrants are not like their neighbors, they are either low when their neighbors are high (upper left) or vise versa (lower right). 
+
+## Discussion 
+
+From what I can tell there is clustering of sids cases in North Carolina and in 1979 non-white birth rate might explain that trend, atleast in part, but in both cases I think something bigger might be driving it. 
+
+I would suggest the inclusion of another variable, perhaps related to education, or to educational campaigns done by health departments or other organizations about SIDS, and seeing if that explains any more of the variation. 
+
+I apologize that I was not able to give this the time I should have, but I didn't, and that is my fault for managing my time poorly, but some other things had to take priority this week. 
+
+
+### Bibliography
