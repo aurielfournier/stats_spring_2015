@@ -25,6 +25,7 @@ library(ggplot2)
 library(rgdal)
 library(gridExtra)
 library(AICcmodavg)
+library(spatstat)
 setwd("C:/Users/avanderlaar/Documents/GitHub/data")
 dat <- read.csv("all_birds.csv")
 dat <- na.omit(dat)
@@ -36,12 +37,9 @@ colnames(utm) <- c("utm_w","utm_n")
 dat <- cbind(dat, utm)
 dat4 <- dat[dat$year==2014,]
 
-
 jdate4 <- unique(dat4$jdate)
 
-
 list4 <- list()
-
 
 ## so this takes each day adn makes a list with each unique date being a level in the lsit
 # removes days in which only one observer saw birds
@@ -51,67 +49,55 @@ for(i in 1:length(jdate4)){
   list4[[i]] <- dat}
 }
 
-
-
 ## this pairs up eahc point with the nearest point by the other observer and measures the difference
 
 dist4 <- list()
 newdf <- list()
 
-for (i in c(1:14,16:21,24:40)) {
+dista <- list()
+newdfa <- list()
+for (i in c(1:14, 16:21,24:40)){
   df <- as.data.frame(list4[[i]])
   if (nrow(df)>1){
-  a <- df[df$obs=="A",]
-  b <- df[df$obs=="N",]
-            for(j in 1:nrow(a)){
-            c <- b[which.min(sqrt(abs(a[j,"utm_n"]-b[,"utm_n"])^2 + abs(a[j,"utm_w"]-b[,"utm_w"])^2)),]
-            d <- a[j,]
-            c$dist <- min(sqrt(abs(a[j,"utm_n"]-b[,"utm_n"])^2 + abs(a[j,"utm_w"]-b[,"utm_w"])^2))
-            dist4[[j]] <- cbind(c,d)
-      }
-  newdf[[i]] <- do.call(rbind, dist4)
-}}
+    a <- df[df$obs=="N",]
+    b <- df[df$obs=="A",]
+    cdf <- crossdist(a$utm_w, a$utm_n, b$utm_w, b$utm_n)
+    c <- apply(cdf, 1, min)
+    cdf2 <- crossdist(b$utm_w, b$utm_n, a$utm_w, a$utm_n)
+    d <- apply(cdf2, 1, min)
+    newdfa[[i]] <- rbind(cbind(a, dist=c),cbind(b,dist=d))
+  }
+  }
+  
 
-
-dist <- do.call(rbind, newdf)
-
+dist <- do.call(rbind, newdfa)
+dist <- dist[dist$dist<=1500,]
+dist$log <- log(dist$dist)
 
 ggplot(data=dist[dist$canwr=="nvca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("nv")
 ggplot(data=dist[dist$canwr=="scnwr",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("sc")
 ggplot(data=dist[dist$canwr=="fgca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("fg")
 ggplot(data=dist[dist$canwr=="slnwr",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("sl")
 ggplot(data=dist[dist$canwr=="tsca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("ts")
 ggplot(data=dist[dist$canwr=="bkca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("bk")
 ggplot(data=dist[dist$canwr=="dcca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=dist))+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   ggtitle("dc")
 
+hist(dist$log, breaks=100)
+hist(dist$dist, breaks=100)
 
-
-
-
-hist(dist[dist$dist<=1500,]$dist, breaks=100)
-
-models <- list()
-
-models[[1]] <- lm(dist~jdate, data=dist)
-models[[2]] <- lm(dist~region, data=dist)
-models[[3]] <- lm(dist~canwr, data=dist)
-models[[4]] <- lm(dist~round, data=dist)
-models[[5]] <- lm(dist~species, data=dist)
-
-aictab(models)
 
 ```
