@@ -1,0 +1,159 @@
+# Evaluating Differences Between Observers and the impact on Detection of Noctural ATV surveys
+## Auriel M.V. Fournier
+## March 31, 2015
+
+Goal - To determine if repeat nocturnal ATV surveys for rails detect the same individuals and how detection varies as a result of distance from the transect line. 
+
+Observer bias and variability is one of the large causes of worry and violations of many assumptions when surveying wildlife populations, for an unvetted survey method like nocturnal ATV surveys this is especially true. 
+
+I propose using the marked point patterns from repeated surveys on the same nights to assess differences in observers and to determine if two surveys on the same night observer comparable numbers of birds. 
+
+## Introduction
+
+Rails are very difficult to detect, which makes surveying for them, and assessing the success of those surveys, very challenging. Rails are difficult to detect because they don't vocalize regularly in the fall, and do not respond to vocalizations, and their behavior has them dense in vegetation most of the time. They are also reluctant to flush out of the vegetation until you are very close to them. This is one of the reasons they are the least studied group of birds in North America and why there are no standard survey methods for them outside of the breeding season (Conway 2012). 
+
+In 2013 and 2014 my project did double surveys each night, in which a wetland impoundment was surveyed two times, by two different people, in a short period of time (3 hours). Since rails are active during the day other then responding to our presence in the wetland (for which I have telemetry data to support they only move 3-10 meters) we are assuming that they are sleeping or still the rest of the night. As a result we hope that these two surveys are surveying the same birds in roughly the same locations. I propose using point pattern analysis to examine the differences in marked point patterns from 2013 and 2014. I will look at distance from the line and how it impacts detection along with differences in the patterns of points between the two observers. 
+
+## Methods
+
+I have a marked point patterns of observations of rails on 13 different public properties in 45 different wetland units across 6 months of surveys (3 months in each year). I will summarize the differences in pattern at the wetland level, as that is the unit of interest to my project as a whole and is the unit at which we consider the survey to be completed. 
+
+Across that time period we had four different observers (four in 2013 and two returning in 2014). For the purposes of this project we are just going to look at 2014, since there are only two observers so its simpler. If these patterns work for two observers I will expand them to the four from 2013. 
+
+```{r,message=FALSE}
+library(ggplot2)
+library(rgdal)
+library(gridExtra)
+library(spatstat)
+```
+
+```{r}
+setwd("C:/Users/avanderlaar/Documents/GitHub/data")
+dat <- read.csv("all_birds.csv")
+dat <- na.omit(dat)
+## I am removing these three sites because they have very few points, and were causing most, but not all of the issues with outliers. These three sites are Ten Mile Pond Conservation Area (tmpca), Otter Slough Conservation Area (osca) and Clarence Cannon National Wildlife Refuge (ccnwr)
+dat <- dat[dat$canwr!="tmpca"|dat$canwr!="osca"|dat$canwr!="ccnwr",]
+
+## reprojecting the points into utm 
+utm <- as.data.frame(project(cbind(dat$long, dat$lat), "+proj=utm +zone=15 ellps=WGS84"))
+colnames(utm) <- c("utm_w","utm_n")
+
+dat <- cbind(dat, utm)
+# taking only the 2014 points
+dat4 <- dat[dat$year==2014,]
+
+#figuring out how many unique survey days we have. jdate = julian date
+jdate4 <- unique(dat4$jdate)
+
+# creating list to put each days points into seperately. 
+list4 <- list()
+## so this takes each day adn makes a list with each unique date being a level in the lsit
+# removes days in which only one observer saw birds
+for(i in 1:length(jdate4)){
+  dat <- dat4[dat4$jdate==jdate4[i],]
+  if (length(unique(dat$obs))>1){
+  list4[[i]] <- dat}
+}
+
+## 
+
+dist4 <- list()
+newdf <- list()
+
+dista <- list()
+newdfa <- list()
+for (i in c(1:14, 16:21,24:40)){
+  # takes one element out of the list and makes it a data frame
+  df <- as.data.frame(list4[[i]])
+  if (nrow(df)>1){
+    # splits the points from one night into two point patterns, one for me (A) and one for Nick (N)
+    a <- df[df$obs=="N",]
+    b <- df[df$obs=="A",]
+    # figures out the distance between all the a points and the n points
+    cdf <- crossdist(a$utm_w, a$utm_n, b$utm_w, b$utm_n)
+    # finds the shortest distance for each point (row)
+    c <- apply(cdf, 1, min)
+    #figures out the distance between all the n points and the a points
+    cdf2 <- crossdist(b$utm_w, b$utm_n, a$utm_w, a$utm_n)
+    # finds the shortest distance for each point (row)
+    d <- apply(cdf2, 1, min)
+    # cbinding together the distances with their respective points, then stacking the points together with rbind into a new data frame for that particular jdate, and putting it in it's own object in this new list. 
+    newdfa[[i]] <- rbind(cbind(a, dist=c),cbind(b,dist=d))
+  }
+  }
+  
+# binding together all the objects from the above for loop
+dist <- do.call(rbind, newdfa)
+# cutting out the outliers (those over 1500 meters, which are all instsances where the nearest point was in an entirely different survey unit)
+dist <- dist[dist$dist<=1500,]
+# log transforming the distances, to see if that helps anything, since we are really low number heavy
+dist$log <- log(dist$dist)
+```
+```{r, warning=FALSE}
+## reading in the outlines of the units we surveyed
+nv <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="nv_impound")
+nv <- spTransform(nv, CRS("+proj=utm +zone=15 ellps=WGS84"))
+nv$ID <- seq(1:5)
+nv <- nv[nv$ID != 4 & nv$ID != 3,]
+sc <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="sc_impound")
+sc <- spTransform(sc,CRS("+proj=utm +zone=15 ellps=WGS84"))
+sc <- sc[sc$NAME=="MSU 3"|sc$NAME=="MSU 2"|sc$NAME=="Snow Goose B"|sc$NAME=="Snow Goose D",]
+sl <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="sl_impound")
+sl <- spTransform(sl, CRS("+proj=utm +zone=15 ellps=WGS84"))
+sl <- sl[sl$Id==3|sl$Id==4|sl$Id==5,]
+fg <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="fg_impound")
+fg <- spTransform(fg, CRS("+proj=utm +zone=15 ellps=WGS84"))
+fg <- fg[fg$pool_name=="GRWI 3"|fg$pool_name=="Pool 2"|fg$pool_name=="GRWI 2",]
+ts <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="ts_impound")
+ts <- spTransform(ts,CRS("+proj=utm +zone=15 ellps=WGS84"))
+ts <- ts[ts$pool_name=="1A-3A"|ts$pool_name=="6A"|ts$pool_name=="8A"|ts$pool_name=="4A",]
+bkkl9 <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="bk_impound9")
+bkkl9 <- spTransform(bkkl9, CRS("+proj=utm +zone=15 ellps=WGS84"))
+bkkl5 <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="bk_impound5")
+bkkl5 <- spTransform(bkkl5, CRS("+proj=utm +zone=15 ellps=WGS84"))
+bkkl6 <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="bk_impound6")
+bkkl6 <- spTransform(bkkl6, CRS("+proj=utm +zone=15 ellps=WGS84"))
+bkkl2 <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="bk_impound2")
+bkkl2 <- spTransform(bkkl2, CRS("+proj=utm +zone=15 ellps=WGS84"))
+dc <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="dc_impound")
+dc <- spTransform(dc, CRS("+proj=utm +zone=15 ellps=WGS84"))
+dc <- dc[dc$Id == 18 | dc$Id == 20|dc$Id ==22|dc$Id ==14,]
+```
+```{r}
+# plots plots plots
+ggplot(data=dist[dist$canwr=="nvca",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=nv, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("nv")
+ggplot(data=dist[dist$canwr=="scnwr",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=sc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("sc")
+ggplot(data=dist[dist$canwr=="fgca",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=fg, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("fg")
+ggplot(data=dist[dist$canwr=="slnwr",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=sl, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("sl")
+ggplot(data=dist[dist$canwr=="tsca",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=ts, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("ts")
+ggplot(data=dist[dist$canwr=="bkca",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=bkkl9, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  geom_polygon(data=bkkl2, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  geom_polygon(data=bkkl5, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  geom_polygon(data=bkkl6, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("bk")
+ggplot(data=dist[dist$canwr=="dcca",])+
+  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
+  geom_polygon(data=dc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("dc")
+
+hist(dist$dist, breaks=100)
+hist(dist$log, breaks=100)
+
+```
