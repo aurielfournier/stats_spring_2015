@@ -1,0 +1,512 @@
+---
+title: "Geostatical Analysis Notes"
+author: "Jackson Cothren"
+date: "March 17, 2015"
+output:
+  html_document:
+    fig_height: 8
+    fig_width: 12
+    keep_md: yes
+    number_sections: yes
+    theme: default
+    toc: yes
+  pdf_document:
+    fig_height: 6
+    fig_width: 7
+    keep_tex: yes
+    number_sections: yes
+    toc: yes
+  word_document: default
+---
+
+# Structure of geostastical data (field data)
+
+We separate the structure of a field dataset into large-scale structure (trends) and small-scale strcuture (residual variation, similar to spatial autocorrelation).
+
+Load our necessary packages...
+
+```{r}
+# load necessary packages:
+library(maptools)
+library(gstat)
+library(rgdal)
+library(lattice)
+library(geoR)
+library(spatstat)
+```
+
+
+## Exploring large scale structure 
+
+Before studying models for variograms (which describe small-scale or residual variation), we should discuss the removal of any large-scale variation (or trend) that might be present. In spatial modeling, researchers have historically taken two different views on describing any trend present. Both of these views recognize the same basic model form for the process. Before discussing the two approaches taken toward modeling any trend present, it is important to understand the following model form used in virtually any type of nondeterministic model.
+
+Model Form: Recall that the set of random variables ${Z(s):s\in R}$ is a random function,
+with some mean and variance given by $\mu(s)$ and $\sigma^2(s)$ respectively. Under weak stationarity, the mean and variance are no longer functions of the location $s$. However, more generally (and realistically), nondeterministic models are assumed to have the form:
+
+$$
+\begin{align}
+  Z(s) &= \mu(s) + \epsilon(s),s \in R \\
+       & =(\mbox{Large-scale varation}) + (\mbox{Small-scale variation})
+\end{align}
+$$ 
+
+where $R$ is the region of interest.
+
+The mean (or trend) function $\mu(s)$ may be a function of the location and/or of some list
+of covariates. It may be expressed as a linear or nonlinear function of some regression parameters, a generalized linear model (GLM), a generalized additive model (GAM), or most generally may be modeled nonparametrically. One of the goals of this opening section is to introduce a nonparametric method of modeling the trend known as median polish. 
+
+As mentioned at the outset, there are two general approaches taken toward modeling the trend and error structure in spatial processes. These are:
+
+1. First remove the trend and perform any subsequent analysis on the resulting residuals.
+2. Model the trend and error structure simultaneously. (One example of this approach is
+universal kriging, discussed later)
+
+In this section, we'll take the first approach, and look at both parametric and nonparametric
+methods of trend removal.
+
+### Parametric fitting
+
+Consider the following data on arsenic concentrations taken over 21 locations with corresponding elevations. 
+
+* $z$ = the arsenic concentration measurements (in ppb),
+* $w$ = the corresponding elevations (in feet),
+* $x$ = $s_1$ = the x-coordinate of the measurement, and
+* $y$ = $s_2$ = the y-coordinate of the measurement.
+
+```{r}
+arsenic <- read.table('arsenic.txt')
+arsenic
+```
+
+Note the histograms of both arsenic concentration and it's natural log. The natural log tends to spread our data better (rather than having so many values concentrated a smaller values) so we will often fit data to the natural log of the concentrations.
+
+```{r}
+arsenic$logconc <- log(arsenic$conc)
+```
+
+
+```{r}
+par(mfrow = c(1,2))
+hist(arsenic$conc, main='Arsenic conc in ppb');
+hist(arsenic$logconc, main='log(Arsenic conc in ppb)');
+par(mfrow = c(1,1))
+```
+
+
+
+1. If there were a roughly linear trend in the x-direction, and a linear relationship between arsenic levels and elevations, we might try modeling the mean function as the regression model...
+
+$$\mu(s) = \beta_o + \beta_1 x + \beta_3 w$$
+
+2. Suppose there were linear trends in both the x- and y-directions which were interactive, and an exponentially decreasing relationship between arsenic levels and elevation. What mean model could we try fitting to these data?
+
+$$\mu(s) = \beta_o + \beta_1 x + \beta_2 y + \beta_3 x y + + \beta_4 e^{-w}$$
+
+3. Suppose a bubble plot reveals a definite SE-NW trend in the arsenic concentrations.
+
+```{r}
+# coerce data.frame to SpatialPointsDataFrame
+coordinates(arsenic) <- ~x+y
+bubble(arsenic, 'logconc', scales=list(draw=T), maxsize=4.0, col='grey')
+```
+
+What trend function could we construct? You could try 
+
+$$\mu(s) = \beta_o + \beta_1 x + \beta_2 y$$
+
+In R we simply use the now familiar `lm` command.
+
+```{r}
+arsenic.reg <- lm(log(conc)~x+y, data=arsenic)
+summary(arsenic.reg)
+```
+
+Neither $x$ nor $y$ alone predict arsenic concentrations very well at all. The residuals are very large compared to the data values themselves.
+
+4. Since trend is neither in the EW or NS direction, but rather in a diagnal direction running SE-NW, we might be better off creating a new explanatory variable along this direction. For example, since the upper left-hand corner of the region is sampled at the coordinates (1075951, 905157) we could create a variable which is the distance from this point. 
+
+```{r}
+x <- arsenic$x
+y <- arsenic$y
+arsenic$dist <- sqrt((x-min(x))**2 + (y-max(y))**2) + 1  # add 1 so there is no zero
+
+plot(arsenic$dist,arsenic$conc,ylab="Concentration",xlab="Distance from NW Corner", main="Arsenic Concentration vs. Rotated Trend Axis",cex.main=1.6, cex.lab=1.6,cex.axis=1.5,cex=1.3, mgp=c(2.7,1,0))
+
+```
+
+This essentially creates a new x-axis in the predominate direction of the samples. There are other (perhaps better) ways to do this but lets see what happens when we fit the following model
+
+```{r}
+arsenic.rot <- lm(log(conc)~dist, data=arsenic)
+summary(arsenic.rot)
+```
+
+Now we see a definite relationship between the distance from the NW corner (along the "rotated" x-axis) and arsenic concentrations.
+
+However, in looking at the plot above, a linear relationship between distance and concentration is not apparent. Instead it appears to be decreasing exponentially. A better model might therefore be...
+
+$$\mu(s) = d^{\alpha-1}e^{\frac{-d}{\beta}}$$
+
+Unfortunately, this is a nonlinear relationship and we must use nonlinear least squares or the `nls` command. Nonlinear least squares linearizes the model using a Taylor series centered on a starting point for $\alpha$ and $\beta$. 
+
+```{r}
+conc <- arsenic$conc
+dist <- arsenic$dist
+arsenic.nlfit <- nls(log(conc) ~ (dist**(alpha-1))*exp(-dist/beta), start=list(alpha=2.17, beta=855))
+summary(arsenic.nlfit)
+```
+
+We get a smaller residual standard error and both $\alpha$ and $\beta$ are highly significant. Let's use the `nls` model to fit a curve to the sample locations.
+
+```{r}
+val <- seq(0,5000,5)
+concdens <- (val**(summary(arsenic.nlfit)$coef[1,1]-1))*exp(-val/summary(arsenic.nlfit)$coef[2,1])
+plot(arsenic$dist,log(arsenic$conc),ylab="ln(conc)",xlab="Distance from NW Corner", main="Arsenic Concentration vs. Rotated Trend Axis",cex.main=1.6, cex.lab=1.6,cex.axis=1.5,cex=1.3, mgp=c(2.7,1,0))
+lines(val,concdens, col='darkred')
+```
+
+So this particular concentration vs. distance model does seem to fit the actual trend a little better. 
+
+All of what we have done so far with the arsenic dataset are examples of fitting __parametric__ models to the mean function in an effort to detrend the data _before_ attempting any analysis of the spatial correlation structure. This is very similar, indeed the same, as what we did for both point pattern and lattice data types.
+
+If fitting a parametric model proves difficult, an alternative __non-parametric__ approach can be attempted. One common and very useful method is due to the famous Tukey, called the __median polish__. 
+
+### Median polishing
+
+The algorith to _polish_ $Z$ is as follows...
+
+1. Assume data on a $p × q$ rectangular grid ${(x_l, y_k):k=1,...,p; l = 1,...,q}$. You can regard grid nodes as cells in a 2-way table. If the data isn't on a rectangular grid, it is common to create a grid and assign data values to the nearest grid point leaving the other grid locations empty.
+2. Operate iteratively on the data. Alternately subtracting row means (or medians) and column means (or medians) and accumulate these means or medians in an extra column and row of cells.
+3. Repeat this procedure until another iteration produces virtually no change.
+4. Final entries in the extra cells are the mean or median polish estimates or row effects $r_1,..,r_p$, column effects $c_1,...,c_q$ and an overall effect $a$.
+5. Final entries in the body of table are residuals, $\hat{epsilon}_{kl}$, such that 
+$$
+\begin{align}
+Z(x_l, y_k) &= \hat{a}+\hat{r}_k+\hat{c}_l+\hat{\epsilon}_{kl} \\
+&= \mu(x_l, y_k) + \hat{\epsilon}_{kl} \\
+&= \mu(s) + \epsilon(s) \\
+\end{align}
+$$
+
+First let's look at an example for non-spatial data - deaths from sport parachuting (from ABC of EDA, p.224):
+
+```{r}
+deaths <- rbind(c(14,15,14), c( 7, 4, 7), c( 8, 2,10), c(15, 9,10), c( 0, 2, 0))
+deaths
+dimnames(deaths) <- list(c("1-24", "25-74", "75-199", "200++", "NA"),paste(1973:1975))
+med.d <- medpolish(deaths)
+
+## Check decomposition:
+all(deaths == med.d$overall + outer(med.d$row,med.d$col, "+") + med.d$resid)
+```
+
+The `gstat` packages contains a dataset obtained from Gomez and Hazen (1970, Tables 19 and 20) on coal ash for the Robena Mine Property in Greene County Pennsylvania. The values represent percentages of coalash measured at 208 different sites. 
+
+```{r}
+data(coalash)
+summary(coalash)
+coordinates(coalash) <- ~x+y
+bubble(coalash, 'coalash', scales=list(draw=T), maxsize=2.0)
+```
+
+Note that these data are already _gridded_.  You will notice unusually high values in some places, and there seems to be a trend of larger to smaller coalash percentages moving roughly from SW corner to the NE corner of the plot. Let's use bloxplots on the rows and columns to summarize this. The following commands create a 
+
+1. boxplot of the coal ash values row by row (y-value), where the 50th value (an outlier) has been omitted from the plot and
+2. boxplot of the coal ash values column by column (x-value), again omitting the outlier.
+
+```{r}
+# coerce the SpatialPointsDataFrame to a data.frame again
+coalash <- as.data.frame(coalash)
+par(mfrow = c(1,2))
+bwplot(y~coalash,data=coalash,subset=-50, cex=1.3,xlab="Coal Ash %", ylab="y", main="Coal Ash % Row Summaries")
+bwplot(x~coalash,data=coalash,subset=-50, cex=1.3,xlab="Coal Ash %", ylab="x", main="Coal Ash % Column Summaries")
+par(mfrow = c(1,1))
+```
+
+To perform a true median polish and remove the underlying trend, take the following steps in R.
+
+```{r}
+# Creates a matrix of the raw coal ash percentages according to their locations..
+coal.mat <- tapply(coalash$coalash, list(factor(coalash$x),factor(coalash$y)),function(x)x) 
+coal.mat
+
+# so that the median polish can be applied on the resulting table (as above)
+coal.mp <- medpolish(coal.mat, na.rm=T)
+coal.mp
+```
+
+The `medpolish` function returns the grand median, vectors of row and column effects, and the resulting residuals under the names: `grand`, `col`, `row`, and `residuals`. To extract the trend or large-scale variation, we could do this...
+
+```{r}
+coal.trend <- coal.mat - coal.mp$residuals
+```
+
+We can assess whether or not the median polish successfully removed any trend by comparing greyscale plots of the regions before and after the polish. 
+
+```{r}
+par(mfrow=c(1,3))
+
+# Computes the minimum and maximum of all coal ash percentages and trend values, not including missing values (!is.na).
+zmin <- min(coal.mat[!is.na(coal.mat)], coal.trend[!is.na(coal.trend)]) 
+zmax <- max(coal.mat[!is.na(coal.mat)], coal.trend[!is.na(coal.trend)]) 
+
+# Creates a greyscale map of the coal ash %’s without interpolation.
+image(x=1:max(coalash$x),y=1:max(coalash$y), coal.mat,zlim=c(zmin,zmax),cex.axis=1.5, xlab="Columns",ylab="Rows",cex.lab=1.6,col=gray.colors(12))
+# Puts legend on the plot with colors matching those in image statement.
+# image.legend(9.5,3,zlim=range(coal.mat, na.rm=T),col=gray.colors(12)) 
+title("Original Coal Ash %’s",cex.main=1.5)
+
+# Creates a greyscale map of the coal ash trend values w/o interpolation.
+image(x=1:max(coalash$x),y=1:max(coalash$y), 
+coal.trend,zlim=c(zmin,zmax),cex.axis=1.5, xlab="Columns",ylab="Rows",cex.lab=1.6,col=gray.colors(12))
+# Puts legend on the plot with colors matching those in image statement.
+# image.legend(9.5,3,zlim=range(coal.trend, na.rm=T),col=gray.colors(12))
+title("Median Polish Trend",cex.main=1.5)
+
+# Creates a greyscale map of the coal ash residuals w/o interpolation.
+image(x=1:max(coalash$x),y=1:max(coalash$y), 
+coal.mp$resid,zlim=range(coal.mp$resid, na.rm=T),xlab="Columns",ylab="Rows",cex.lab=1.6,cex.axis=1.5,col=gray.colors(12))
+# image.legend(9.5,3,zlim=range(coal.mp$resid, na.rm=T),col=gray.colors(12))
+title("Median Polish Residuals",cex.main=1.5)
+
+par(mfrow=c(1,1))
+```
+
+One could also look at moving window statistics to see if the mean and variance of the
+median polish residuals are stable.
+
+```{r}
+mean(!is.na(coal.mp$residuals))
+var(as.vector(!is.na(coal.mp$residuals)))
+```
+
+
+Some final comments on median polish
+
+1. The technique of median polish is generally used prior to computing the variogram to remove any spatial trend present which is not well-described by some parsimonious function. After this large-scale variation is removed, all subsequent spatial analysis takes place on the median polish residuals. As estimation of the variogram presumes a stationary mean and variance, it is generally reasonable to assume that the residuals resulting from a median polish satisfy this property.
+
+2. The median polish algorithm is not affected by missing data or irregular grids.
+
+3. There are numerous other types of polishing that could be done. Instead of medians, one might choose to polish with means (if there are no gross outliers), trimmed means, or any type of weighted average of the data values. The basic decomposition of the trend into grand, row, and column effects will remain the same, and the algorithm will preserve this relationship throughout. Using medians is the most common choice due to their general robustness to erratic data values.
+
+4. The median polish is not guaranteed to converge, but does in certain cases (see Fink, A.M. How to Polish off Median Polish. SIAM Journal of Scientific and Statistical Computing, 9, 932-940 (1988), for details). For this reason, a stopping rule is often defined for the algorithm of the form: Whenever none of the entries in the table change by more than ǫ at a given iteration, the algorithm is terminated.
+
+5. Removal of the trend prior to modeling the covariance structure receives mixed reviews from users of spatial techniques. Some feel that removing the trend (i.e. modeling the large-scale variation) introduces bias into the resulting residuals from which the covariance structure is extracted. This bias is a result of the choice of the trend function or method used. However, failure to remove any underlying trends negates the validity of the variogram due to the stationarity assumption. So, in either case, there is a problem. One final alternative is to model the trend and the covariance structure simultaneously, as is done with universal kriging. The difficulty here is that it is often very hard to separate which effects are due to large-scale and small-scale variation. 
+
+## Exploring small-scale structure (the variogram)
+
+There are several methods to explore the small-scale dependence. The h-scatterplot can be used to examine the strength of association between observations of the response variable as a function of distance and direction. The covariance function, correlogram, and variogram (or semivariogram) are all functions that numerically characterize the strength of such associations. Before we look at how to work with these, we understand taht With most spatial data, two common assumptions are made. 
+
+1. __Spatial Continuity__: The spatial autocorrelation between the responses at 2 sites only depends on the distance and perhaps direction of orientation, not on where these sites are located in the region of interest.
+2. __Stationarity__: Additionally, it is often assumed that the mean and variance are constant across the region of interest (p. 162 (B&G)). 
+
+We'll explore both of these laters. In both time series analysis and spatial analysis, it is necessary to make some kind of assumption such as these in order to estimate the correlation pattern and the variance because realizations of the data cannot be assumed independent. Both of these two assumptions essentially allow for global homogeneity, so that different parts of the region can be treated as if they were replicates. This enables computation of a common covariance function for all parts of the region of interest. Removing the trend (or the dependence of a response variable on spatial location) is how we often meet the criteria imposed by these assumptions. 
+
+There are two basic types of stationarity assumptions, outlined below. The first is known as _covariance_, _second-order_, or _weak stationarity_, and the second is know as _intrinsic stationarity_.
+
+1. _Covariance_, _Second-Order_ or _Weak Stationarity_: This is assumed for the covariance function (and corresponding correlation function or correlogram). 
+* $E(Y_i) = E(Y_j)$ for all sites $i, j \in \mathbb{R}$. 
+* $\mathbb{R}$ $Cov(Y_i , Y_j ) = C(h)$ where $h = (s1_i , s2_i) − (s1_j, s2_j )$. 
+* The first condition implies that the mean is constant over the region while the second conditions implies that the variance is the same everywhere and the covariance between two response variables depends only on the distance and direction between the two sites, not the location.
+
+2. _Intrinsic Stationarity_: This is assumed for the variogram (or semivariogram).
+* $E(Y_i) = E(Y_j )$ for all sites $i, j \in \mathbb{R}$. 
+* $Var(Y_i − Y_j ) = \gamma(h), h = (s1_i, s2_i) − (s1_j, s2+j )$. 
+* This implies that the mean is constant over the region $\mathbb{R}$ and the variance of the _difference_ is the same everywhere. The variance of the $Y_i's$ may not be the same everywhere. This is the weaker of the two types of stationarity assumptions.
+
+### h-scatterplots (lag scatterplots)
+We observe the process $Z$ at equally spaced locations $s_1,...,s_n$. Plot $Z(s_i + h\mathbf{e})$ versus $Z(s_i)$ for a fixed vector $\mathbf{e}$ (defines direction) of unit length, a fixed scalar $h$, and for all $i = 1,...,n$ (e.g. $\mathbf{e} = (1, 0), h=1$). Outliers can be detected with the resulting graph.The graph may reveal the existence of anisotropy and/or nonstationarity in the mean and/or variance.
+
+```{r}
+# Plots the cross h-scatterplots for the Walker Lake (n=100) V&U-data, and
+# plots the cross-covariogram, cross-correlogram, and cross-semivariogram
+# functions for the U,V data.  The hscatter function was used to generate
+# the cross h-scatterplots.
+# ========================================================================
+walk100 <- read.table("walk100.txt",header=T) # Reads in walk100 Walker Lake data.
+x <- walk100$x                         # x is set to the x-values of "walk100".
+y <- 11 - walk100$y                    # y is set to 11 - the y-values of "walk100".
+v <- walk100$v                         # v is set to the V-values of "walk100".
+u <- walk100$u                         # u is set to the U-values of "walk100".
+
+# Creates the 5 cross-h scatterplots on page 39 of the class notes
+# ================================================================
+par(mfrow=c(3,2))                      # Sets up a 3x2 graphics window.
+hscatter(x,y,v,u,c(0,0))               # Produces a scatterplot of u vs. v.
+hscatter(x,y,v,u,c(0,1))               # Produces a cross h=(0,1)-scatterplot of u vs. v.
+hscatter(x,y,v,u,c(0,2))               # Produces a cross h=(0,2)-scatterplot of u vs. v.
+hscatter(x,y,v,u,c(0,3))               # Produces a cross h=(0,3)-scatterplot of u vs. v.
+hscatter(x,y,v,u,c(1,0))               # Produces a cross h=(1,0)-scatterplot of u vs. v.
+
+# Plots the 3 cross-functions on page 42 of the class notes
+# =========================================================
+h <- c(0,1,2,3,4,5,6)                              # Sets a vector of h-values.
+out <- matrix(nrow=length(h),ncol=3)               # Defines an hx3 blank matrix.
+for (i in 0:6) out[i+1,] <- as.numeric(            # Loops through distances of 0 to 6 and
+  hscatter(x,y,v,u,c(0,i)))                        #   calculates cross-functions for each.
+cch <- out[,1]; cph <- out[,2]; cgh <- out[,3]     # Defines the vectors of cross-covariances,
+                                                   #   cross-corr's, & cross-semivariograms.
+par(mfrow=c(2,2))                                  # Sets up a 2x2 graphics window.
+plot(h,cch,type="n",axes=F,xlab="",ylab="")        # Creates a completely blank plot.
+plot(h,cch,type="l",xlab="|h|",ylab="Cross - C(h)",# Plots the cross-correlations vs. h
+  cex.lab=1.5,cex.axis=1.3)                        #   with sizes controlled by "cex".
+title("Cross-Covariogram for U,V",cex=1)           # Puts a title on the plot.
+plot(h,cph,type="l",xlab="|h|",ylab="Cross - p(h)",# Plots the cross-correlogram vs. h
+  cex.lab=1.5,cex.axis=1.3)                        #   with sizes controlled by "cex".
+title("Cross-Correlogram for U,V",cex=1)           # Puts a title on the plot.
+plot(h[-1],cgh[-1],type="l",xlab="|h|",cex.lab=1.5,# Plots the cross-semivariogram vs. h
+  ylab="Cross - Gamma(h)",cex.axis=1.3)            #   with sizes controlled by "cex".
+title("Cross-Semivariogram for U,V",cex=1)         # Puts a title on the plot.
+```
+
+###variogram cloud 
+A plot $(Z(s_i) − Z(s_j))^2$ versus $|s − s_j|^\frac{1}{2}$ (Euclidean distance) for all pairs of observations. It may be advisable to bin the lags and plot a boxplot for each bin. The square-root differences $(Z(s_i) − Z(s_j))^{\frac{1}{2}}$ are more resistant to outliers. The variogram cloud implicitly assumes isotropy (does not differentiate any directions).
+
+###sample semivariogram
+The traditional sample semivariogram $\hat{\gamma}$ suggested by Matheron (1971) is:
+
+$$\hat{\gamma}(\mathbf{v}) = \frac{1}{2N(\mathbf{v})}\sum_{N(\mathbf{v})}(Z(s_i) - Z(s_j))^2$$
+
+where $N(\mathbf{v})$ is the number of data pairs $s_i$ and $s_j$ separated by $\mathbf{v}$. Plot $\hat{\gamma}(\mathbf{v})$ versus different values of $\mathbf{v}$. Note that this implicitly assumes
+stationarity of some kind. You can display the variogram along selected directions (e.g., N-S, NW-SE,
+E-W, and NE-WE) on the same 2-D graph.
+
+
+```{r}
+# Reads in Walker Lake Sample Data Set (n=470)
+# ============================================
+walk470 <- read.table("walk470.txt",header=T)   # Reads in the data.
+plot(walk470$x,walk470$y,xlab="x",ylab="y",          # Plots the 470 (x,y)-locations of the sample
+  cex.lab=1.6,cex.axis=1.5,cex.main=1.8,             #   Walker Lake data.
+  main="Walker Lake Sample Locations\n(U-locations are closed circles)")
+points(walk470$x[!is.na(walk470$u)],                 # Overlays the 295 U-locations as closed
+  walk470$y[!is.na(walk470$u)],pch=16)               #   circles.
+
+# Creates a histogram of the Walker Lake Sample V-values
+# ======================================================
+hbrk <- seq(-100,1550,50)                            # Defines the histogram interval breaks.
+hist(walk470$v+.1,breaks=hbrk,xlab="V (ppm)",ylab=   # Creates a histogram of the V-values with axis
+  "Frequency (%)",xlim=c(-100,1550),ylim=c(0,70.5),  #   labels, axis limits set, and no axes plotted.
+  main="",cex.lab=1.6,axes=F)
+axis(1,at=seq(0,1500,500),tick=F,pos=0,              # Defines the x-axis(1), with axis labels at 0,500,
+  mgp=c(3,.5,0),cex.axis=1.5)                        #   1000, & 1500 of character size 1.5.
+axis(2,at=seq(0,15,5)*4.7,pos=-100,mgp=c(3,0.5,0),   # Defines the y-axis(2), with axis labels at 0,5,10,
+  tck=.02,labels=seq(0,15,5),las=2,cex.axis=1.5)     #   & 15% with inward tick marks (tck=.02).
+
+# Creates a histogram of the Walker Lake Sample U-values
+# ======================================================
+hbrk <- seq(-100,1550,50)                            # Defines the histogram interval breaks.
+u <- walk470$u[walk470$u<1550]                       # Eliminates U-values at 1550 or above.
+hist(u+.1,breaks=hbrk,xlab="U (ppm)",ylab=           # Creates a histogram of the U-values with axis
+  "Frequency (%)",xlim=c(-100,1550),ylim=c(0,55),    #   labels, axis limits set, and no axes plotted.
+  main="",cex.lab=1.6,axes=F)
+axis(1,at=seq(0,1500,500),tick=F,pos=0,              # Defines the x-axis(1), with axis labels at 0,500,
+  mgp=c(3,.5,0),cex.axis=1.5)                        #   1000, & 1500 of character size 1.5.
+axis(2,at=seq(0,20,5)*2.75,pos=-100,mgp=c(3,0.5,0),  # Defines the y-axis(2), with axis labels at 0,5,10,
+  tck=.02,labels=seq(0,20,5),las=2,cex.axis=1.5)     #   15 & 20% with inward tick marks (tck=.02).
+
+# Creates a scatterplot of the Sample U-values vs. V-values
+# =========================================================
+type <- walk470$t
+plot(walk470$v,walk470$u,pch=" ",xlab="V (ppm)",ylab="U (ppm)", # Plots U vs. V with the "+" sign, no axis
+  axes=F,xlim=c(0,1500),ylim=c(0,2000),cex.lab=1.6)             #   labels, no axes, and axis limits as set.
+points(walk470$v[type==1],walk470$u[type==1],pch="o",cex=1.5)   # Plots the type 1 points.
+points(walk470$v[type==2],walk470$u[type==2],pch="+",cex=1.5)   # Plots the type 2 points.
+axis(1,at=seq(0,1500,500),tck=.02,pos=0,mgp=c(3,.5,0),          # Puts an x-axis on the plot, with inward
+  cex.axis=1.3)                                                 #   tick marks, at position 0.
+axis(2,at=seq(0,2000,500),tck=.02,pos=0,mgp=c(3,.5,0),las=2,cex.axis=1.3) # Puts a y-axis on the plot.
+
+# Creates a plot of moving window means vs. SDs for V data and U data
+# ===================================================================
+v.move <- movewin(walk470$x,walk470$y,walk470$v,60,60,40)       # Calculates moving window means & SDs
+plot(v.move$means,v.move$sdevs,xlim=c(0,1000),ylim=c(0,500),    # Plots the moving window SDs vs. means
+  pch=" ",xlab="Mean",ylab="Standard Deviation",axes=F,         #   for the V-data with axis labels and
+  cex.lab=1.6,cex=1.5)                                          #   a blank plotting character.
+points(v.move$means[v.move$numvals<20],                         # Plots (SD,mean) pairs for windows with
+  v.move$sdevs[v.move$numvals<20],pch="o",cex=1.5)              #   less than 20 points.
+points(v.move$means[v.move$numvals>=20],                        # Plots (SD,mean) pairs for windows with
+  v.move$sdevs[v.move$numvals>=20],pch="+",cex=1.5)             #   20 points or more.
+axis(1,at=seq(0,1000,200),tck=.02,pos=0,mgp=c(3,.5,0),          # Puts an x-axis on the plot.
+  cex.axis=1.5)
+axis(2,at=seq(0,500,100),tck=.02,pos=0,mgp=c(3,.5,0),las=2,     # Puts a y-axis on the plot.
+  cex.axis=1.5)
+text(100,510,"(a)",cex=1.5)                                     # Puts text on plot at (100,510).
+
+u.move <- movewin(walk470$x[196:470],walk470$y[196:470],        # Calculates moving window means & SDs
+  walk470$u[196:470],60,60,40)                                  #   for U-data without missing values.
+plot(u.move$means,u.move$sdevs,xlim=c(0,1500),ylim=c(0,1500),   # Plots the moving window SDs vs. means
+  pch=" ",xlab="Mean",ylab="Standard Deviation",axes=F,         #   for the U-data with axis labels and
+  cex.lab=1.6,cex=1.5)                                          #   a blank plotting character.
+points(u.move$means[u.move$numvals<20],                         # Plots (SD,mean) pairs for windows with
+  u.move$sdevs[u.move$numvals<20],pch="o",cex=1.5)              #   less than 20 points.
+points(u.move$means[u.move$numvals>=20],                        # Plots (SD,mean) pairs for windows with
+  u.move$sdevs[u.move$numvals>=20],pch="+",cex=1.5)             #   20 points or more.
+axis(1,at=seq(0,1500,500),tck=.02,pos=0,mgp=c(3,.5,0),          # Puts an x-axis on the plot.
+  cex.axis=1.5) 
+axis(2,at=seq(0,1500,500),tck=.02,pos=0,mgp=c(3,1.0,0),         # Puts a y-axis on the plot.
+  las=2,cex.axis=1.5)
+text(120,1520,"(b)",cex=1.5)                                   # Puts text on plot at (-170,1650).
+
+# Creates a plot of moving window means vs. SDs for log-transformed V data and U data
+# ===================================================================================
+logv <- log(walk470$v+1)                                        # Log transform of V-values.
+v.move <- movewin(walk470$x,walk470$y,logv,60,60,40)            # Calculates moving window means & SDs
+plot(v.move$means,v.move$sdevs,xlim=c(0,7),ylim=c(0,3),pch=" ", # Plots the moving window SDs vs.
+  xlab="Mean (Log(V+1))",ylab="Standard Deviation",axes=F,      #   means for the log V-data with
+  main="Means vs. SDs for Log-Transformed V-Data",cex.lab=1.6,  #   title and axis labels.
+  cex.main=1.6,cex=1.5)
+points(v.move$means[v.move$numvals<20],                         # Plots (SD,mean) pairs for windows with
+  v.move$sdevs[v.move$numvals<20],pch="o",cex=1.5)              #   less than 20 points.
+points(v.move$means[v.move$numvals>=20],                        # Plots (SD,mean) pairs for windows with
+  v.move$sdevs[v.move$numvals>=20],pch="+",cex=1.5)             #   20 points or more.
+axis(1,at=seq(0,7,1),tck=.02,pos=0,mgp=c(3,.5,0),cex.axis=1.5)  # Puts an x-axis on the plot.
+axis(2,at=seq(0,3,1),tck=.02,pos=0,mgp=c(3,.5,0),las=2,         # Puts a y-axis on the plot.
+  cex.axis=1.5)
+
+logu <- log(walk470$u[196:470]+1)                               # Log transform of U-values.
+u.move <- movewin(walk470$x[196:470],walk470$y[196:470],        # Calculates moving window means & SDs
+  logu,60,60,40)                                                #   for U-data without missing values.
+plot(u.move$means,u.move$sdevs,xlim=c(0,7),ylim=c(0,5),pch=" ", # Plots the moving window SDs vs.
+  xlab="Mean (Log(U+1))",ylab="Standard Deviation",,axes=F,     #   means for the log U-data with
+  main="Means vs. SDs for Log-Transformed U-Data",cex.lab=1.6,  #   title and axis labels.
+  cex.main=1.6,cex=1.5)
+points(u.move$means[u.move$numvals<20],                         # Plots (SD,mean) pairs for windows with
+  u.move$sdevs[u.move$numvals<20],pch="o",cex=1.5)              #   less than 20 points.
+points(u.move$means[u.move$numvals>=20],                        # Plots (SD,mean) pairs for windows with
+  u.move$sdevs[u.move$numvals>=20],pch="+",cex=1.5)             #   20 points or more.
+axis(1,at=seq(0,7,1),tck=.02,pos=0,mgp=c(3,.5,0),cex.axis=1.5)  # Puts an x-axis on the plot.
+axis(2,at=seq(0,5,1),tck=.02,pos=0,mgp=c(3,.5,0),las=2,         # Puts a y-axis on the plot.
+  cex.axis=1.5)
+
+# Creates a plot of moving window means vs. SDs for square root-transformed V data and U data
+# ===========================================================================================
+sqrtv <-sqrt(walk470$v)                                         # Square root transform of V-values.
+v.move <- movewin(walk470$x,walk470$y,sqrtv,60,60,40)           # Calculates moving window means & SDs
+plot(v.move$means,v.move$sdevs,xlim=c(0,26),ylim=c(0,13),       # Plots the moving window SDs vs.
+  xlab="Mean (Square Root(V))",ylab="Standard Deviation",       #   means for the square root V-data
+  main="Means vs. SDs for Square Root-Transformed V-Data",
+  pch=" ",axes=F,cex.lab=1.6,cex.main=1.6,cex=1.5)
+points(v.move$means[v.move$numvals<20],                         # Plots (SD,mean) pairs for windows with
+  v.move$sdevs[v.move$numvals<20],pch="o",cex=1.5)              #   less than 20 points.
+points(v.move$means[v.move$numvals>=20],                        # Plots (SD,mean) pairs for windows with
+  v.move$sdevs[v.move$numvals>=20],pch="+",cex=1.5)             #   20 points or more.
+axis(1,at=seq(0,25,5),tck=.02,pos=0,mgp=c(3,.5,0),cex.axis=1.5) # Puts an x-axis on the plot.
+axis(2,at=seq(0,12,3),tck=.02,pos=0,mgp=c(3,.5,0),las=2,        # Puts a y-axis on the plot.
+  cex.axis=1.5)
+
+sqrtu <- sqrt(walk470$u[196:470])                               # Square root transform of U-values.
+u.move <- movewin(walk470$x[196:470],walk470$y[196:470],        # Calculates moving window means & SDs
+  sqrtu,60,60,40)                                               #   for sqrt U-data w/o missing values.
+plot(u.move$means,u.move$sdevs,xlim=c(0,32),ylim=c(0,18),       # Plots the moving window SDs vs.
+  xlab="Mean (Square Root(U))",ylab="Standard Deviation",       #   means for the square root U-data
+  main="Means vs. SDs for Square Root-Transformed U-Data",
+  pch=" ",axes=F,cex.lab=1.6,cex.main=1.6,cex=1.5)
+points(u.move$means[u.move$numvals<20],                         # Plots (SD,mean) pairs for windows with
+  u.move$sdevs[u.move$numvals<20],pch="o",cex=1.5)              #   less than 20 points.
+points(u.move$means[u.move$numvals>=20],                        # Plots (SD,mean) pairs for windows with
+  u.move$sdevs[u.move$numvals>=20],pch="+",cex=1.5)             #   20 points or more.
+axis(1,at=seq(0,32,4),tck=.02,pos=0,mgp=c(3,.5,0),cex.axis=1.5) # Puts an x-axis on the plot.
+axis(2,at=seq(0,18,3),tck=.02,pos=0,mgp=c(3,.5,0),las=2,        # Puts a y-axis on the plot.
+  cex.axis=1.5)
+```
+
