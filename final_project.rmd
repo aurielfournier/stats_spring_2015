@@ -32,7 +32,7 @@ setwd("C:/Users/avanderlaar/Documents/GitHub/data")
 dat <- read.csv("all_birds.csv")
 dat <- na.omit(dat)
 ## I am removing these three sites because they have very few points, and were causing most, but not all of the issues with outliers. These three sites are Ten Mile Pond Conservation Area (tmpca), Otter Slough Conservation Area (osca) and Clarence Cannon National Wildlife Refuge (ccnwr)
-dat <- dat[dat$canwr!="tmpca"|dat$canwr!="osca"|dat$canwr!="ccnwr",]
+dat <- dat[dat$canwr!="tmpca"&dat$canwr!="osca"&dat$canwr!="ccnwr"&dat$canwr!="tsca",]
 
 ## reprojecting the points into utm 
 utm <- as.data.frame(project(cbind(dat$long, dat$lat), "+proj=utm +zone=15 ellps=WGS84"))
@@ -62,7 +62,7 @@ newdf <- list()
 
 dista <- list()
 newdfa <- list()
-for (i in c(1:14, 16:21,24:40)){
+for (i in c(1:length(list4))){
   # takes one element out of the list and makes it a data frame
   df <- as.data.frame(list4[[i]])
   if (nrow(df)>1){
@@ -89,7 +89,7 @@ dist <- dist[dist$dist<=1500,]
 # log transforming the distances, to see if that helps anything, since we are really low number heavy
 dist$log <- log(dist$dist)
 ```
-```{r, warning=FALSE}
+```{r, warning=FALSE, echo=FALSE, message=FALSE, results="hide"}
 ## reading in the outlines of the units we surveyed
 nv <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="nv_impound")
 nv <- spTransform(nv, CRS("+proj=utm +zone=15 ellps=WGS84"))
@@ -119,41 +119,49 @@ dc <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="dc_impound")
 dc <- spTransform(dc, CRS("+proj=utm +zone=15 ellps=WGS84"))
 dc <- dc[dc$Id == 18 | dc$Id == 20|dc$Id ==22|dc$Id ==14,]
 ```
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 # plots plots plots
 ggplot(data=dist[dist$canwr=="nvca",])+
   geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   geom_polygon(data=nv, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("nv")
+  ggtitle("nvca - Nodaway Valley Conservation Area")
 ggplot(data=dist[dist$canwr=="scnwr",])+
   geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   geom_polygon(data=sc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("sc")
+  ggtitle("scnwr - Squaw Creek National Wildlife Refuge")
 ggplot(data=dist[dist$canwr=="fgca",])+
   geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   geom_polygon(data=fg, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("fg")
+  ggtitle("fgca - Fountain Grove Conservation Area")
 ggplot(data=dist[dist$canwr=="slnwr",])+
   geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   geom_polygon(data=sl, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("sl")
-ggplot(data=dist[dist$canwr=="tsca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=ts, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("ts")
+  ggtitle("slnwr - Swan Lake National Wildlife Refuge")
 ggplot(data=dist[dist$canwr=="bkca",])+
   geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   geom_polygon(data=bkkl9, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   geom_polygon(data=bkkl2, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   geom_polygon(data=bkkl5, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   geom_polygon(data=bkkl6, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("bk")
+  ggtitle("bkca - BK Leach Conservation Area")
 ggplot(data=dist[dist$canwr=="dcca",])+
   geom_point(aes(x=utm_w, y=utm_n, colour=log))+
   geom_polygon(data=dc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  ggtitle("dc")
+  ggtitle("dcca - Duck Creek Conservation Area")
 
-hist(dist$dist, breaks=100)
-hist(dist$log, breaks=100)
+```
+
+```{r, fig.height=10}
+ggplot()+
+  geom_histogram(data=dist, aes(x=log), binwidth=.5)+
+  facet_grid(canwr ~ .)
+
+```
+
+So something weird is happening at Swan Lake NWR (slnwr) but the rest seem...vaguely normally distributed. 
+
+```{r}
+model <- lm(data=dist, log ~ canwr)
+summary(model)
 
 ```
