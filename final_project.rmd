@@ -1,12 +1,5 @@
-# Evaluating Differences Between Observers and the impact on Detection of Noctural ATV surveys
+# Evaluating Differences Between Observers surveying for rails at night on ATVs
 ## Auriel M.V. Fournier
-## March 31, 2015
-
-Goal - To determine if repeat nocturnal ATV surveys for rails detect the same individuals and how detection varies as a result of distance from the transect line. 
-
-Observer bias and variability is one of the large causes of worry and violations of many assumptions when surveying wildlife populations, for an unvetted survey method like nocturnal ATV surveys this is especially true. 
-
-I propose using the marked point patterns from repeated surveys on the same nights to assess differences in observers and to determine if two surveys on the same night observer comparable numbers of birds. 
 
 ## Introduction
 
@@ -16,9 +9,9 @@ In 2013 and 2014 my project did double surveys each night, in which a wetland im
 
 ## Methods
 
-I have a marked point patterns of observations of rails on 13 different public properties in 45 different wetland units across 6 months of surveys (3 months in each year). I will summarize the differences in pattern at the wetland level, as that is the unit of interest to my project as a whole and is the unit at which we consider the survey to be completed. 
+I have a marked point patterns of observations of Sora (*Porzana carolina*) on 13 different public properties in 45 different wetland units across 6 months of surveys (3 months in each year). I will summarize the differences in pattern at the wetland level, as that is the unit of interest to my project as a whole and is the unit at which we consider the survey to be completed. 
 
-Across that time period we had four different observers (four in 2013 and two returning in 2014). For the purposes of this project we are just going to look at 2014, since there are only two observers so its simpler. If these patterns work for two observers I will expand them to the four from 2013. 
+Across that time period we had four different observers (four in 2013 and two returning in 2014). For the purposes of this project we are just going to look at 2014, since there are only two observers so its simpler. If these patterns work for two observers I will expand them to the four from 2013 in the future. 
 
 ```{r,message=FALSE}
 library(ggplot2)
@@ -27,11 +20,13 @@ library(gridExtra)
 library(spatstat)
 ```
 
+First I subsetted out just the 2014 data and removed four of the sites because they had very few observations and were creating very high distance values. Then I re-projected it from lat/long to UTM. 
 ```{r}
 setwd("C:/Users/avanderlaar/Documents/GitHub/data")
 dat <- read.csv("all_birds.csv")
 dat <- na.omit(dat)
-## I am removing these three sites because they have very few points, and were causing most, but not all of the issues with outliers. These three sites are Ten Mile Pond Conservation Area (tmpca), Otter Slough Conservation Area (osca) and Clarence Cannon National Wildlife Refuge (ccnwr)
+dat <- dat[dat$species=="sora",]
+## I am removing these three sites because they have very few points, and were causing most, but not all of the issues with outliers. These four sites are Ten Mile Pond Conservation Area (tmpca), Otter Slough Conservation Area (osca), Clarence Cannon National Wildlife Refuge (ccnwr) and Ted Shanks Conservation Area (tsca)
 dat <- dat[dat$canwr!="tmpca"&dat$canwr!="osca"&dat$canwr!="ccnwr"&dat$canwr!="tsca",]
 
 ## reprojecting the points into utm 
@@ -44,7 +39,11 @@ dat4 <- dat[dat$year==2014,]
 
 #figuring out how many unique survey days we have. jdate = julian date
 jdate4 <- unique(dat4$jdate)
+```
 
+Then I created a list where each object in the list is a data frame of just the observations from that day. 
+
+```{r}
 # creating list to put each days points into seperately. 
 list4 <- list()
 ## so this takes each day adn makes a list with each unique date being a level in the lsit
@@ -56,7 +55,11 @@ for(i in 1:length(jdate4)){
 }
 
 ## 
+```
 
+Then I wrote a for loop to use the crossdist function from the spatstat package to calculate the distance from each point to every other point in another set of points, and vise versa. These are then rbind-ed together into one master dataset. 
+
+```{r}
 dist4 <- list()
 newdf <- list()
 
@@ -84,15 +87,15 @@ for (i in c(1:length(list4))){
   
 # binding together all the objects from the above for loop
 dist <- do.call(rbind, newdfa)
-# cutting out the outliers (those over 1500 meters, which are all instsances where the nearest point was in an entirely different survey unit)
-dist <- dist[dist$dist<=1500,]
-# log transforming the distances, to see if that helps anything, since we are really low number heavy
-dist$log <- log(dist$dist)
+# cutting out the outliers (those over 1000 meters, which are all instsances where the nearest point was in an entirely different survey unit)
+dist <- dist[dist$dist<=1000,]
+
 ```
+
 ```{r, warning=FALSE, echo=FALSE, message=FALSE, results="hide"}
 ## reading in the outlines of the units we surveyed
 nv <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="nv_impound")
-nv <- spTransform(nv, CRS("+proj=utm +zone=15 ellps=WGS84"))
+#nv <- spTransform(nv, CRS("+proj=utm +zone=15 ellps=WGS84"))
 nv$ID <- seq(1:5)
 nv <- nv[nv$ID != 4 & nv$ID != 3,]
 sc <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="sc_impound")
@@ -119,41 +122,52 @@ dc <- readOGR(dsn="C:/Users/avanderlaar/Dropbox/GIS/2014", layer="dc_impound")
 dc <- spTransform(dc, CRS("+proj=utm +zone=15 ellps=WGS84"))
 dc <- dc[dc$Id == 18 | dc$Id == 20|dc$Id ==22|dc$Id ==14,]
 ```
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=10}
 # plots plots plots
-ggplot(data=dist[dist$canwr=="nvca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=nv, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+library(ggmap)
+latlong <- read.csv("~/GitHub/stats_spring_2015/ggmap_coords.csv")
+  
+nvca <- get_map(location=c(latlong[latlong$area=="nvca",]$long, latlong[latlong$area=="nvca",]$lat), zoom=14,maptype="satellite")
+scnwr <- get_map(location=c(latlong[latlong$area=="scnwr",]$long, latlong[latlong$area=="scnwr",]$lat), zoom=14,maptype="satellite")
+fgca <- get_map(location=c(latlong[latlong$area=="fgca",]$long, latlong[latlong$area=="fgca",]$lat), zoom=14,maptype="satellite")
+slnwr <- get_map(location=c(latlong[latlong$area=="slnwr",]$long, latlong[latlong$area=="slnwr",]$lat), zoom=14,maptype="satellite")
+bkca <- get_map(location=c(latlong[latlong$area=="bkca",]$long, latlong[latlong$area=="bkca",]$lat), zoom=14,maptype="satellite")
+dcca <- get_map(location=c(latlong[latlong$area=="dcca",]$long, latlong[latlong$area=="dcca",]$lat), zoom=14,maptype="satellite")
+
+ggmap(nvca)+
+  geom_point(data=dist[dist$canwr=="nvca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=nv, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   ggtitle("nvca - Nodaway Valley Conservation Area")
-ggplot(data=dist[dist$canwr=="scnwr",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=sc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+ggmap(scnwr)+
+  geom_point(data=dist[dist$canwr=="scnwr",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=sc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   ggtitle("scnwr - Squaw Creek National Wildlife Refuge")
-ggplot(data=dist[dist$canwr=="fgca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=fg, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+ggmap(fgca)+
+  geom_point(data=dist[dist$canwr=="fgca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=fg, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   ggtitle("fgca - Fountain Grove Conservation Area")
-ggplot(data=dist[dist$canwr=="slnwr",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=sl, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+ggmap(slnwr)+
+  geom_point(data=dist[dist$canwr=="slnwr",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=sl, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   ggtitle("slnwr - Swan Lake National Wildlife Refuge")
-ggplot(data=dist[dist$canwr=="bkca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=bkkl9, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  geom_polygon(data=bkkl2, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  geom_polygon(data=bkkl5, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
-  geom_polygon(data=bkkl6, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+ggmap(bkca)+
+  geom_point(data=dist[dist$canwr=="bkca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=bkkl9, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  #geom_polygon(data=bkkl2, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  #geom_polygon(data=bkkl5, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  #geom_polygon(data=bkkl6, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   ggtitle("bkca - BK Leach Conservation Area")
-ggplot(data=dist[dist$canwr=="dcca",])+
-  geom_point(aes(x=utm_w, y=utm_n, colour=log))+
-  geom_polygon(data=dc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+ggmap(dcca)+
+  geom_point(data=dist[dist$canwr=="dcca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=dc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
   ggtitle("dcca - Duck Creek Conservation Area")
 
 ```
 
 ```{r, fig.height=10}
 ggplot()+
-  geom_histogram(data=dist, aes(x=log), binwidth=.5)+
+  geom_histogram(data=dist, aes(x=dist), binwidth=10)+
   facet_grid(canwr ~ .)
 
 ```
@@ -161,7 +175,15 @@ ggplot()+
 So something weird is happening at Swan Lake NWR (slnwr) but the rest seem...vaguely normally distributed. 
 
 ```{r}
-model <- lm(data=dist, log ~ canwr)
+model <- lm(data=dist, dist ~ canwr)
 summary(model)
 
 ```
+
+In 2013 and 2014 we put out radio transmitters on rails and tracked them in response to the ATVs. We never observed a rail moving more then 10 meters from its original location in response to an ATV. Based on our efforts catching rails at night we know that once they fly/or run from an ATV they typical stop and stay where they end up. At night they are sleeping, so they likely return to sleeping after we disturb them. Based on this I do not think they are actively moving around the impoundment during the night, at least not large distances. 
+
+Based on the model outputs from the distance sampling based surveys that we do (that generated these point patterns) detection probability for a Sora is low ~30%. So the fact that most of these points don't have a close (<50m) neighbor isn't surprising. 
+
+What I find most intriguing is that on some properties the farther distance points are clustered, which based on my knowledge of the area makes sense, since most of them are in areas with very thick/tall vegetation that makes detection very difficult, so detection probability is probably lower there. 
+
+I'm not sure expanding this project to 2013 is worth examining since this has reinforced my ideas that detection is low, but does prompt thinking about how we should be thinking about repeat surveys  
