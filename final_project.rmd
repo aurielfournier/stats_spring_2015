@@ -90,6 +90,8 @@ dist <- do.call(rbind, newdfa)
 # cutting out the outliers (those over 1000 meters, which are all instsances where the nearest point was in an entirely different survey unit)
 dist <- dist[dist$dist<=1000,]
 
+dist$scale <- as.numeric(scale(dist$dist))
+
 ```
 
 ```{r, warning=FALSE, echo=FALSE, message=FALSE, results="hide"}
@@ -169,6 +171,31 @@ ggmap(dcca)+
 ggplot()+
   geom_histogram(data=dist, aes(x=dist), binwidth=10)+
   facet_grid(canwr ~ .)
+
+ggplot()+
+  geom_histogram(data=dist, aes(x=scale), binwidth=0.01)+
+  facet_grid(canwr ~ .)
+
+model <- lm(data=dist, scale ~ canwr)
+
+uni <- unique(dist$canwr)
+
+canwr <- list()
+
+for(i in 1:6){
+  canwr[[i]] <- dist[dist$canwr==uni[i],]
+}
+
+library(BSDA)
+
+z <- list()
+
+for(i in 1:6){
+  df <- canwr[[i]]
+  z[[i]] <- z.test(df$scale, mu=0, sigma.x=1)
+}
+
+z
 
 ```
 
