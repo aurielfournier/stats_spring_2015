@@ -1,0 +1,82 @@
+---
+title: "Maps_for_final"
+author: "Auriel Fournier"
+date: "April 26, 2015"
+output: html_document
+---
+
+
+```{r, warning=FALSE, echo=FALSE, message=FALSE, results="hide"}
+## reading in the outlines of the units we surveyed
+nv <- readOGR(dsn=".", layer="nv_impound")
+#nv <- spTransform(nv, CRS("+proj=utm +zone=15 ellps=WGS84"))
+nv$ID <- seq(1:5)
+nv <- nv[nv$ID != 4 & nv$ID != 3,]
+sc <- readOGR(dsn=".", layer="sc_impound")
+sc <- spTransform(sc,CRS("+proj=utm +zone=15 ellps=WGS84"))
+sc <- sc[sc$NAME=="MSU 3"|sc$NAME=="MSU 2"|sc$NAME=="Snow Goose B"|sc$NAME=="Snow Goose D",]
+sl <- readOGR(dsn=".", layer="sl_impound")
+sl <- spTransform(sl, CRS("+proj=utm +zone=15 ellps=WGS84"))
+sl <- sl[sl$Id==3|sl$Id==4|sl$Id==5,]
+fg <- readOGR(dsn=".", layer="fg_impound")
+fg <- spTransform(fg, CRS("+proj=utm +zone=15 ellps=WGS84"))
+fg <- fg[fg$pool_name=="GRWI 3"|fg$pool_name=="Pool 2"|fg$pool_name=="GRWI 2",]
+ts <- readOGR(dsn=".", layer="ts_impound")
+ts <- spTransform(ts,CRS("+proj=utm +zone=15 ellps=WGS84"))
+ts <- ts[ts$pool_name=="1A-3A"|ts$pool_name=="6A"|ts$pool_name=="8A"|ts$pool_name=="4A",]
+bkkl9 <- readOGR(dsn=".", layer="bk_impound9")
+bkkl9 <- spTransform(bkkl9, CRS("+proj=utm +zone=15 ellps=WGS84"))
+bkkl5 <- readOGR(dsn=".", layer="bk_impound5")
+bkkl5 <- spTransform(bkkl5, CRS("+proj=utm +zone=15 ellps=WGS84"))
+bkkl6 <- readOGR(dsn=".", layer="bk_impound6")
+bkkl6 <- spTransform(bkkl6, CRS("+proj=utm +zone=15 ellps=WGS84"))
+bkkl2 <- readOGR(dsn=".", layer="bk_impound2")
+bkkl2 <- spTransform(bkkl2, CRS("+proj=utm +zone=15 ellps=WGS84"))
+dc <- readOGR(dsn=".", layer="dc_impound")
+dc <- spTransform(dc, CRS("+proj=utm +zone=15 ellps=WGS84"))
+dc <- dc[dc$Id == 18 | dc$Id == 20|dc$Id ==22|dc$Id ==14,]
+```
+
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=10}
+# plots plots plots
+library(ggmap)
+latlong <- read.csv("~/Documents/stats_spring_2015/ggmap_coords.csv")
+  
+nvca <- get_map(location=c(latlong[latlong$area=="nvca",]$long, latlong[latlong$area=="nvca",]$lat), zoom=14,maptype="satellite")
+scnwr <- get_map(location=c(latlong[latlong$area=="scnwr",]$long, latlong[latlong$area=="scnwr",]$lat), zoom=14,maptype="satellite")
+fgca <- get_map(location=c(latlong[latlong$area=="fgca",]$long, latlong[latlong$area=="fgca",]$lat), zoom=14,maptype="satellite")
+slnwr <- get_map(location=c(latlong[latlong$area=="slnwr",]$long, latlong[latlong$area=="slnwr",]$lat), zoom=14,maptype="satellite")
+bkca <- get_map(location=c(latlong[latlong$area=="bkca",]$long, latlong[latlong$area=="bkca",]$lat), zoom=14,maptype="satellite")
+dcca <- get_map(location=c(latlong[latlong$area=="dcca",]$long, latlong[latlong$area=="dcca",]$lat), zoom=14,maptype="satellite")
+
+ggmap(nvca)+
+  geom_point(data=dist[dist$canwr=="nvca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=nv, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("nvca - Nodaway Valley Conservation Area")
+ggmap(scnwr)+
+  geom_point(data=dist[dist$canwr=="scnwr",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=sc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("scnwr - Squaw Creek National Wildlife Refuge")
+ggmap(fgca)+
+  geom_point(data=dist[dist$canwr=="fgca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=fg, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("fgca - Fountain Grove Conservation Area")
+ggmap(slnwr)+
+  geom_point(data=dist[dist$canwr=="slnwr",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=sl, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("slnwr - Swan Lake National Wildlife Refuge")
+ggmap(bkca)+
+  geom_point(data=dist[dist$canwr=="bkca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=bkkl9, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  #geom_polygon(data=bkkl2, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  #geom_polygon(data=bkkl5, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  #geom_polygon(data=bkkl6, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("bkca - BK Leach Conservation Area")
+ggmap(dcca)+
+  geom_point(data=dist[dist$canwr=="dcca",],aes(x=long, y=lat, colour=dist))+
+  #geom_polygon(data=dc, aes(x=long,y=lat, group=group), fill=NA, colour="black")+
+  ggtitle("dcca - Duck Creek Conservation Area")
+
+```
