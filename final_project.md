@@ -1,9 +1,9 @@
 ---
 bibliography: stats.bib
 output:
-  pdf_document: default
   html_document:
     keep_md: yes
+  pdf_document: default
 ---
 
 
@@ -12,71 +12,36 @@ output:
 
 ## Introduction
 
-Rails are very difficult to detect, which makes surveying for them, and assessing the success of those surveys, very challenging [@Conway2010; @Melvin1996a]. Rails are difficult to detect because they don't vocalize regularly in the fall, and do not respond to vocalizations, and their behavior has them dense in vegetation most of the time [@Conway2010; @Budka2013;@Conway2010b;@Conway]. Rails are also reluctant to flush out of the vegetation until you are very close to them. This is one of the reasons they are the least studied group of birds in North America and why there are no standard survey methods for them outside of the breeding season [@Conway2011]. 
+Rails are difficult to detect, which makes surveying for them, and assessing the success of those surveys challenging [@Conway2010; @Melvin1996a]. Detecthing rails is difficult because rails do not vocalize regularly in the fall, do not respond to vocalizations, and spend most of their time in dense vegetation [@Conway2010; @Budka2013;@Conway2010b;@Conway]. Rails are also reluctant to flush out until you are very close to them. This is one of the reasons they are the least studied group of birds in North America and why there are no standard survey methods for them outside of the breeding season [@Conway2011]. 
 
-My projects overall goals are to understand how different kinds of wetland management impact both rails and watefowl during their fall migration. A large part of my data collection is done by going out and surveying the locations of birds in a variety of different wetland impoundments. In 2013 and 2014 my project did double surveys each night, in which a wetland impoundment was surveyed two times, by two different people, in a short period of time (3 hours). These surveys are done from ATVs driving transects after sunset with a spotlight under a distance sampling framework which takes the distance from the survey line to estimate detection probability and generate abundance estimates [@K2006a; @Thomas2010; @Royle2004]. 
+My projects overall goal is to understand how different kinds of wetland management impact both rails and watefowl during their fall migration. The bulk of our data collection is done by going out and surveying the locations of birds wetland impoundments. In 2013 and 2014 my project did double surveys each night, in which a wetland impoundment was surveyed two times, by two different people, in a short period of time (3 hours). These surveys are done from ATVs driving transects after sunset with a spotlight under a distance sampling framework. Hierarchical models are used to take the distance from the survey line to estimate detection probability and generate abundance estimates [@K2006a; @Thomas2010; @Royle2004]. 
 
-Since rails are active during the day other then responding to our presence in the wetland we are assuming that they are sleeping or still the rest of the night. I did some preliminary telemetry work tracking rail's response to ATVs during the past two falls and have not detected one moving more then 10 meters in response to an ATV. As a result we hope that these two surveys on the same night are surveying the same birds in roughly the same locations. I wanted to use this point pattern analysis to examine the differences in marked point patterns from the same night. To do this I will look at the closest point between the two point patterns and examine the distribution of these distances and how they are arranged throughout the wetland impoundments. 
+Rails are diurnal, and other than responding to our presence in the wetland at night we are assuming that they are sleeping . We did some preliminary telemetry work tracking rail's response to ATVs during the past two falls (n=6) and have not detected one moving more then 10 meters in response to an ATV. As a result we hope these two surveys on the same night are surveying the same birds in roughly the same locations. Here I use point pattern analysis to examine the differences in marked point patterns from the same night and compare the distances between them and their nearest neighbor.
 
 ## Methods
 
-I have a marked point patterns of observations of Sora (*Porzana carolina*) on 13 different public properties in 45 different wetland units across 6 months of surveys (3 months in each year). I will summarize the differences in pattern at the wetland level, as that is the unit of interest to my project as a whole and is the unit at which we consider the survey to be completed. 
+I have a marked point patterns of observations of Sora (*Porzana carolina*) on 13 public properties in 45 different wetland impoundments across 6 months of surveys (3 months in each year). I will summarize the differences in pattern at the wetland level, as that is the unit of interest to my project as a whole because that is the scale management decisions are made on. 
 
-Across that time period we had four different observers (four in 2013 and two returning in 2014). For the purposes of this project we are just going to look at 2014, since there are only two observers so its simpler. If these patterns work for two observers I will expand them to the four from 2013 in the future. 
+We had four observers (four in 2013 and two returning in 2014). For the purposes of this project we are just going to look at 2014, since there are only two observers so its simpler. If these patterns work for two observers I will expand the analysis to the four from 2013 in the future. 
 
-First I subsetted out the 2014 data and removed four of the sites because they had very few observations and were creating very high distance values. Then I re-projected it from lat/long to UTM. 
+First I subsetted the 2014 data and removed four of the sites because they had very few observations and were creating very high distance values. Then I re-projected it from lat/long to UTM. 
 
 ```r
 library(ggplot2)
-```
-
-```
-## Warning: package 'ggplot2' was built under R version 3.1.3
-```
-
-```
-## Loading required package: methods
 ```
 
 ```r
 library(rgdal)
 ```
 
-```
-## Loading required package: sp
-## rgdal: version: 0.8-16, (SVN revision 498)
-## Geospatial Data Abstraction Library extensions to R successfully loaded
-## Loaded GDAL runtime: GDAL 1.9.2, released 2012/10/08
-## Path to GDAL shared files: /Library/Frameworks/R.framework/Versions/3.1/Resources/library/rgdal/gdal
-## Loaded PROJ.4 runtime: Rel. 4.8.0, 6 March 2012, [PJ_VERSION: 480]
-## Path to PROJ.4 shared files: /Library/Frameworks/R.framework/Versions/3.1/Resources/library/rgdal/proj
-```
-
 ```r
 library(gridExtra)
-```
-
-```
-## Loading required package: grid
 ```
 
 ```r
 library(AICcmodavg)
 library(spatstat)
 ```
-
-```
-## Warning: package 'spatstat' was built under R version 3.1.2
-```
-
-```
-## 
-## spatstat 1.40-0       (nickname: 'Do The Maths') 
-## For an introduction to spatstat, type 'beginner'
-## 
-## Note: R version 3.1.1 (2014-07-10) is more than 9 months old; we strongly recommend upgrading to the latest version
-```
-
 
 ```r
 setwd("/Users/AurielFournier/Documents/data")
@@ -98,7 +63,7 @@ dat4 <- dat[dat$year==2014,]
 jdate4 <- unique(dat4$jdate)
 ```
 
-Then I created a list where each object in the list is a data frame of just the observations from that day. 
+Then I created a list where each object in the list is a data frame of the observations from a ginle unique night of surveys. 
 
 
 ```r
@@ -115,7 +80,7 @@ for(i in 1:length(jdate4)){
 ## 
 ```
 
-Then I wrote a for loop to use the crossdist function from the spatstat package to calculate the distance from each point to every other point in another set of points, and vise versa. These are then rbind-ed together into one master dataset. 
+Then I wrote a for loop to use the crossdist function from the spatstat package to calculate the distance from each point by observer A to each point by observer B and vise versa. These are then rbind-ed together into one master dataset. 
 
 
 ```r
@@ -152,6 +117,7 @@ dist <- dist[dist$dist<=1000,]
 dist$scale <- as.numeric(scale(dist$dist))
 ```
 
+# Results
 
 
 ```r
@@ -162,26 +128,20 @@ ggplot()+
 
 ![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-51.png) 
 
+**Figure 1 - Histogram of distances by conservation area/national wildlife refuge**
+
 ```r
 ggplot()+
   geom_histogram(data=dist, aes(x=scale), binwidth=0.01)+
   facet_grid(canwr ~ .)
 ```
-
-```
-## Warning: position_stack requires constant width: output may be incorrect
-## Warning: position_stack requires constant width: output may be incorrect
-## Warning: position_stack requires constant width: output may be incorrect
-## Warning: position_stack requires constant width: output may be incorrect
-## Warning: position_stack requires constant width: output may be incorrect
-## Warning: position_stack requires constant width: output may be incorrect
-```
-
 ![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-52.png) 
 
-```r
-model <- lm(data=dist, scale ~ canwr)
+**Figure 2 - Histogram of scaled distances by conservation area/national wildlife refuge**
 
+None of these distributions appear normal via visual assessment and I ran a Z-test on each of the scaled values to quanitaitvely assess this. They are significantly different then a normal distribution. 
+
+```r
 uni <- unique(dist$canwr)
 
 canwr <- list()
@@ -191,35 +151,6 @@ for(i in 1:6){
 }
 
 library(BSDA)
-```
-
-```
-## Warning: package 'BSDA' was built under R version 3.1.2
-```
-
-```
-## Loading required package: e1071
-```
-
-```
-## Warning: package 'e1071' was built under R version 3.1.2
-```
-
-```
-## Loading required package: lattice
-## 
-## Attaching package: 'lattice'
-## 
-## The following object is masked from 'package:spatstat':
-## 
-##     panel.histogram
-## 
-## 
-## Attaching package: 'BSDA'
-## 
-## The following object is masked from 'package:datasets':
-## 
-##     Orange
 ```
 
 ```r
@@ -234,6 +165,7 @@ z
 ```
 
 ```
+
 ## [[1]]
 ## 
 ## 	One-sample z-Test
@@ -317,8 +249,7 @@ z
 ## mean of x 
 ##   -0.4592
 ```
-
-So something weird is happening at Swan Lake NWR (slnwr) but the rest seem...vaguely normally distributed. 
+Next I ran a linear model to see if distance could be explained by differences in property, and the model came out with all parameters being significant, though the R^2 is low (22). 
 
 
 ```r
@@ -351,14 +282,28 @@ summary(model)
 ## F-statistic:   54 on 5 and 936 DF,  p-value: <2e-16
 ```
 
+These differences may be related to the habitat at each area, which does vary, and the density of birds we observed, since some properties have higher bird densities, which increases our chances of having points close together and may impact detection probability. 
+
+
+Next I looked at the spatial distribution of the points, each one colored by it's distance from its nearest neighbor in the other set of points. These are all the points for the entire year. 
+
+![plot of bkca](bkca.png) 
+![plot of dcca](dcca.png) 
+![plot of fgca](fgca.png) 
+![plot of nvca](nvca.png) 
+![plot of scnwr](scnwr.png) 
+![plot of slnwr](slnwr.png) 
+
+**Figure 3 - Detection locations of birds on each property**
+
 # Discussion
 
-In 2013 and 2014 we put out radio transmitters on rails and tracked them in response to the ATVs. We never observed a rail moving more then 10 meters from its original location in response to an ATV. Based on our efforts catching rails at night we know that once they fly/or run from an ATV they typical stop and stay where they end up. At night they are sleeping, so they likely return to sleeping after we disturb them. Based on this I do not think they are actively moving around the impoundment during the night, at least not large distances. 
+In 2013 and 2014 we deployed radio transmitters on rails and tracked them in response to the ATVs. We never observed a rail moving more then 10 meters from its original location in response to an ATV. Based on our efforts catching rails at night we know once they fly/or run from an ATV they typical land 5-10 meters away and stay where they land. At night the rails are sleeping and we assume they return to sleeping after we disturb them. Based on this I do not think they are actively moving around the impoundment during the night, at least not large distances. But our sample size (n=6) could bias our assumptions.
 
-Based on the model outputs from the distance sampling based surveys that we do (that generated these point patterns) detection probability for a Sora is low ~30%. So the fact that most of these points don't have a close (<50m) neighbor isn't surprising. 
+Based on the model outputs from the distance sampling based surveys - the surveys which generated these point patterns -  detection probability for a Sora is low (<30%). Most points nearest neighbor being >50m isn't surprising. With only a 30% chance of seeing an individual bird any instances where we see 'the same bird' on two seperate surveys is unlikely. This does bring into question the value of repeating surveys, 
 
-What I find most intriguing is that on some properties the farther distance points are clustered, which based on my knowledge of the area makes sense, since most of them are in areas with very thick/tall vegetation that makes detection very difficult, so detection probability is probably lower there. 
+What I find intriguing is the farther distance points are clustered and based on my knowledge of the area this makes sense. These areas with farther distance points are covered in very thick/tall vegetation that rails often do not select these habitats to use and makes detection difficult and detection probability may be lower there (<15%). 
 
-I'm not sure expanding this project to 2013 is worth examining since this has reinforced my ideas that detection is low, but does prompt thinking about how we should be thinking about repeat surveys  
+For the time being I will not be expanding this project to the 2013 data since th3 2014 data has reinforced my ideas that detection is low, but this analysis does prompt thinking about how we should be thinking about repeat surveys  
 
 # References
