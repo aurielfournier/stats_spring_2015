@@ -30,7 +30,7 @@ library(spatstat)
 ```
 
 ```{r}
-setwd("/Users/AurielFournier/Documents/data")
+setwd("C:/Users/amvander/Desktop")
 dat <- read.csv("all_birds.csv")
 dat <- na.omit(dat)
 dat <- dat[dat$species=="sora",]
@@ -45,8 +45,14 @@ dat <- cbind(dat, utm)
 # taking only the 2014 points
 dat4 <- dat[dat$year==2014,]
 
+veg <- read.csv("all_veg.csv")
+
+
+dat <- merge(dat4, veg, by = "point" , all.x=T, all.y=F)
+
+
 #figuring out how many unique survey days we have. jdate = julian date
-jdate4 <- unique(dat4$jdate)
+uni <- unique(dat$jdate)
 ```
 
 Then I created a list where each object in the list is a data frame of just the observations from that day. 
@@ -54,12 +60,8 @@ Then I created a list where each object in the list is a data frame of just the 
 ```{r}
 # creating list to put each days points into seperately. 
 list4 <- list()
-## so this takes each day adn makes a list with each unique date being a level in the lsit
-# removes days in which only one observer saw birds
-for(i in 1:length(jdate4)){
-  dat <- dat4[dat4$jdate==jdate4[i],]
-  if (length(unique(dat$obs))>1){
-  list4[[i]] <- dat}
+for(i in 1:29){
+  list4[[i]] <- dat[dat$jdate==uni[i],]
 }
 
 ## 
@@ -98,7 +100,7 @@ dist <- do.call(rbind, newdfa)
 # cutting out the outliers (those over 1000 meters, which are all instances where the nearest point was in an entirely different survey unit)
 dist <- dist[dist$dist<=1000,]
 
-dist$scale <- as.numeric(scale(dist$dist))
+dist$sqr <- dist$dist^2
 
 ```
 
@@ -109,10 +111,12 @@ ggplot()+
   facet_grid(canwr ~ .)
 
 ggplot()+
-  geom_histogram(data=dist, aes(x=scale), binwidth=0.01)+
+  geom_histogram(data=dist, aes(x=sqr), binwidth=0.01)+
   facet_grid(canwr ~ .)
 
-model <- lm(data=dist, scale ~ canwr)
+
+
+model <- glm(data=dist, sqr ~ canwr * short)
 
 uni <- unique(dist$canwr)
 
