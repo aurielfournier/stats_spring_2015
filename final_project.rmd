@@ -71,7 +71,7 @@ library(BSDA)
 ```
 
 ```{r}
-setwd("~/GitHub/data")
+setwd("~/Documents/data")
 dat <- read.csv("all_birds.csv")
 dat <- na.omit(dat)
 dat <- dat[dat$species=="sora",]
@@ -129,7 +129,7 @@ dist <- do.call(rbind, newdfa)
 dist <- dist[dist$dist<=500,]
 dist$sqr <- dist$dist^2
 dist$log <- log(dist$dist)
-setwd("~/GitHub/data")
+setwd("~/Documents/data")
 veg <- read.csv("all_veg.csv")
 dat <- merge(dist, veg, by = "point" , all.x=T, all.y=F)
 ```
@@ -180,24 +180,38 @@ summary(sh)
 
 We found a difference of 1 bird on average between the two observers and the our hierarchical models of abundance of birds also suggest that there is no difference between observers, with detection probability being ~30% for both observers. This doesn't mean that we were both seeing the same individual birds, though it does suggest that our surveys are adequate repeats of each other even if we are not seeing the same individuals. 
 
+The distance between nearest points is explained very well by breaking them down by conservation area/national wildlife refuge (R^2 = .94) and when we add in the habtiat variable woody vegetation it increase, though the woody vegetation variable is not significant (p=.06). While additional work needs to be done this suggests that there is a predictable pattern in the distance between points based on the habitat at each site. This has implications for assessing how well this method works in different habitats and understanding how wetland habitat and management impacts rails. 
+
 Our on the ground tracking of birds suggests that the large distances between points we found in this analysis are not because the birds are actively moving around the impoundment during the survey. The hierarchical models which I use to obtain abundance estimates suggest that our detection probability is around 30%, so our chances of seeing the same individuals are low, even if they do stay in the exact same spots. Despite this low detection probability we are still seeing roughly the same number of birds between observers suggesting good predictability of surveys. While more work needs to be done to expand our sample size and look at the behavior of individual birds to ATVs and examine changes in detection probability in relation to abundance of birds and vegetation type this is a good first step in assessing this new methodology for surveying rails in emergent inland wetlands during fall migration. 
 
+Having a reproducible method of monitoring the abundance of a species is key in being able to minotir the population over time and undrsatnd changes in thier abundance in relation to management. In wetlands with high water levels air boats are idea for surveying and capturing rails, but in inland wetlands with shallower water our work has shown that ATVs are an alternative, even with detection probability is very low we are able to detect similar numbers of birds, though the distance between them varies with habitat. Further work needs to be done to assess which habitat types are best for this survey method. 
+
+\newpage
+
 ![](slnwr.png)
+
 **Figure 3 - distribution of points colored by distance to nearest point on the same night at Swan Lake National Wildlife Refuge**
 
 ![](scnwr.png)
+
 **Figure 4 - distribution of points colored by distance to nearest point on the same night at Squaw Creek National Wildlife Refuge**
 
 ![](fgca.png)
+
 **Figure 5 - distribution of points colored by distance to nearest point on the same night at Fountain Grove Conservation Area**
 
 ![](dcca.png)
+
 **Figure 6 - distribution of points colored by distance to nearest point on the same night at Duck Creek Conservation Area**
 
 ![](nvca.png)
+
 **Figure 7 - distribution of points colored by distance to nearest point on the same night at Nodaway Valley Conservation Area**
 
 ![](bkca.png)
+
 **Figure 8 - distribution of points colored by distance to nearest point on the same night at B.K. Leach Memorial Conservation Area**
+
+\newpage
 
 ## References
